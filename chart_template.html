@@ -1,0 +1,114 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+:root {color-scheme:light dark; --ink:#31333f; --grid:#e5e7eb; --border:#d6d8dd; --tip:#fff;}
+@media(prefers-color-scheme:dark){:root{--ink:#fafafa;--grid:#30343b;--border:#41444b;--tip:#17191e;}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;color:var(--ink);background:transparent}
+svg{display:block;width:100%;height:335px;touch-action:none;overflow:visible}
+text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
+.cards{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:12px;margin:10px 2px 0}
+.card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;min-width:0}
+.size-card{grid-column:1/-1}.size-card .value{font-size:20px}
+.label{font-size:14px;margin-bottom:4px}.value{font-size:clamp(16px,3.5vw,25px);white-space:nowrap;font-weight:500}
+.observation{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 2px 0}
+.actions{display:flex;align-items:center;gap:10px;margin:8px 2px;font-size:12px}
+button{background:transparent;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer}
+#tip{position:absolute;display:none;pointer-events:none;background:var(--tip);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:13px}
+</style></head><body>
+<svg id="plot" role="img" aria-label="Target altitude and custom horizon versus local time"></svg>
+<div id="tip" role="tooltip"></div>
+<div class="cards">
+ <div class="card"><div class="label">Alt</div><div id="alt" class="value">—</div></div>
+ <div class="card"><div class="label">Azi</div><div id="az" class="value">—</div></div>
+ <div class="card"><div id="datetime-label" class="label">Time</div><div id="datetime" class="value">—</div></div>
+ <div class="card size-card"><div class="label">Object size</div><div id="object-size" class="value">—</div></div>
+</div>
+<div class="observation">
+ <div class="card"><div class="label">Observation duration</div><div id="duration" class="value">—</div></div>
+ <div class="card"><div class="label">Images (exposure only)</div><div id="images" class="value">—</div></div>
+</div>
+<div class="actions"><button id="clear-interval" type="button">Clear interval</button><span>Click twice on the chart to select an interval.</span></div>
+<script>
+__OBSERVATION_JS__
+const data=__CHART_DATA__;
+const svg=document.getElementById('plot'), ns='http://www.w3.org/2000/svg';
+const timeFormat=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+document.getElementById('datetime-label').textContent=`Time (${data.timezone})`;
+document.getElementById('object-size').textContent=data.object_size;
+let selectedTime=data.times[0], width;
+const plotTop=15,bottom=285,left=45,right=15;
+const low=Math.min(0,...data.alt,...(data.horizon||[])), high=Math.max(90,...data.alt,data.minimum,...(data.horizon||[]));
+const minY=Math.floor(low/10)*10,maxY=Math.ceil(high/10)*10;
+const t0=data.times[0], t1=data.times.at(-1);
+const storageKey=`mw-astro-interval:${data.target_key}:${t0}:${t1}`;
+let boundaries=[];
+try{boundaries=Observation.restore(sessionStorage.getItem(storageKey),t0,t1);}catch(_){}
+let intervalGroup;
+const x=t=>left+(t-t0)/(t1-t0)*(width-left-right);
+const y=a=>bottom-(a-minY)/(maxY-minY)*(bottom-plotTop);
+function el(tag,attrs,parent=svg){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);parent.append(e);return e;}
+function text(value,attrs){const e=el('text',attrs);e.textContent=value;return e;}
+function path(values,color,dash){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(data.times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
+let marker,guide;
+function draw(){
+ width=Math.max(280,svg.getBoundingClientRect().width);svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${width} 335`);
+ for(const period of data.astronomical_night||[]){
+  const beginning=Math.max(t0,period[0]),ending=Math.min(t1,period[1]);
+  if(ending>beginning)el('rect',{'data-astronomical-night':'true',x:x(beginning),y:plotTop,width:x(ending)-x(beginning),height:bottom-plotTop,fill:'#969fc5','fill-opacity':0.16,'pointer-events':'none'});
+ }
+ for(let a=minY;a<=maxY;a+=10){el('line',{x1:left,x2:width-right,y1:y(a),y2:y(a),class:'grid'});text(a,{x:left-8,y:y(a)+4,'text-anchor':'end'});}
+ const ticks=Math.max(2,Math.min(6,Math.floor((width-left-right)/75)));
+ for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:305,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
+ text(`Time (${data.timezone})`,{x:(left+width-right)/2,y:329,'text-anchor':'middle'});
+ const label=text('Altitude (°)',{x:12,y:(plotTop+bottom)/2,'text-anchor':'middle'});label.setAttribute('transform',`rotate(-90 12 ${(plotTop+bottom)/2})`);
+ el('line',{x1:left,x2:width-right,y1:y(data.minimum),y2:y(data.minimum),stroke:'#e69520','stroke-width':2,'stroke-dasharray':'2 4'});
+ if(data.horizon)path(data.horizon,'#c44e52');path(data.alt,'#4c9be8');
+ guide=el('line',{x1:0,x2:0,y1:plotTop,y2:bottom,stroke:'#999','stroke-width':1});
+ marker=el('circle',{r:5,fill:'#4c9be8',stroke:'white','stroke-width':1.5});
+ show(selectedTime);
+ intervalGroup=el('g',{'id':'interval-lines','pointer-events':'none'});
+ renderInterval();
+}
+function show(t){
+ selectedTime=Math.max(t0,Math.min(t1,t));
+ // Interpolate between the adjacent calculated samples for smooth movement.
+ let i=0;while(i<data.times.length-2&&data.times[i+1]<selectedTime)i++;
+ const f=(selectedTime-data.times[i])/(data.times[i+1]-data.times[i]);
+ const altitude=data.alt[i]+f*(data.alt[i+1]-data.alt[i]);
+ const delta=((data.az[i+1]-data.az[i]+540)%360)-180;
+ const azimuth=(data.az[i]+f*delta+360)%360;
+ marker.setAttribute('cx',x(selectedTime));marker.setAttribute('cy',y(altitude));
+ guide.setAttribute('x1',x(selectedTime));guide.setAttribute('x2',x(selectedTime));
+ document.getElementById('alt').textContent=altitude.toFixed(1)+'°';
+ document.getElementById('az').textContent=azimuth.toFixed(1)+'°';
+ document.getElementById('datetime').textContent=timeFormat.format(selectedTime);
+}
+function renderInterval(){
+ intervalGroup.replaceChildren();
+ boundaries.forEach((t,i)=>{
+  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:bottom,stroke:'#bc80ee','stroke-width':2},intervalGroup);
+  const label=el('text',{x:Math.min(width-right-32,Math.max(left+3,x(t)+4)),y:plotTop+12+i*14},intervalGroup);
+  label.textContent=timeFormat.format(t);
+ });
+ const totals=Observation.summary(boundaries,data.exposure_seconds);
+ document.getElementById('duration').textContent=totals?Observation.duration(totals.seconds):'—';
+ document.getElementById('images').textContent=totals?totals.images.toLocaleString('en-GB'):'—';
+}
+function saveInterval(){try{sessionStorage.setItem(storageKey,JSON.stringify(boundaries));}catch(_){} }
+svg.addEventListener('click',event=>{
+ const bounds=svg.getBoundingClientRect(),px=event.clientX-bounds.left,py=event.clientY-bounds.top;
+ if(px<left||px>width-right||py<plotTop||py>bottom)return;
+ const instant=Math.max(t0,Math.min(t1,Math.round((t0+(px-left)/(width-left-right)*(t1-t0))/1000)*1000));
+ boundaries=Observation.select(boundaries,instant,t0,t1);
+ saveInterval();renderInterval();
+});
+document.getElementById('clear-interval').addEventListener('click',()=>{boundaries=[];saveInterval();renderInterval();});
+svg.addEventListener('pointermove',event=>{
+ const bounds=svg.getBoundingClientRect(),px=event.clientX-bounds.left,py=event.clientY-bounds.top;
+ if(px<left||px>width-right||py<plotTop||py>bottom){document.getElementById('tip').style.display='none';return;}
+ show(t0+(px-left)/(width-left-right)*(t1-t0));
+ const tip=document.getElementById('tip');tip.textContent=timeFormat.format(selectedTime);tip.style.display='block';
+ tip.style.left=Math.min(width-65,px+12)+'px';tip.style.top=Math.max(0,py-30)+'px';
+});
+svg.addEventListener('pointerleave',()=>{document.getElementById('tip').style.display='none';});
+new ResizeObserver(draw).observe(svg);
+</script></body></html>

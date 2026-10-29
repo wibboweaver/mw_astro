@@ -1,0 +1,8 @@
+astroquery>=0.4.11
+astropy>=7
+streamlit>=1.66
+pytest>=8
+numpy>=1.25
+pandas>=1.5
+altair>=5
+pillow>=10

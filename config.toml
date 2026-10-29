@@ -1,0 +1,35 @@
+# Sidebar changes are saved automatically. Elevation is configured here only.
+[observatory]
+latitude_deg = 52.293232
+longitude_deg = -3.036226
+height_m = 40.0
+timezone = "Europe/London"
+
+horizon_file = "Decking.txt"
+[chart]
+start_hour = 18
+duration_hours = 12
+step_minutes = 10
+minimum_altitude_deg = 40.0
+evening_date = "2026-10-29"
+start_minute = 25
+visibility_mode = "During window"
+
+exposure_seconds = 120.0
+[targets]
+target_source = "Automatic catalogue"
+catalogue_scope = "Named and Messier objects"
+catalogue_file = "targets.csv"
+
+[preview]
+show_preview = true
+image_field = "Fit target"
+
+[equipment]
+focal_length_mm = 550.0
+sensor_width_mm = 23.5
+sensor_height_mm = 15.7
+frame_rotation_deg = 0.0
+frame_zoom = 1.0
+camera_width_px = 6248
+camera_height_px = 4176
