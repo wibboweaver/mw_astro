@@ -3,7 +3,7 @@
 :root {color-scheme:light dark; --ink:#31333f; --grid:#e5e7eb; --border:#d6d8dd; --tip:#fff;}
 @media(prefers-color-scheme:dark){:root{--ink:#fafafa;--grid:#30343b;--border:#41444b;--tip:#17191e;}}
 *{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;color:var(--ink);background:transparent}
-svg{display:block;width:100%;height:335px;touch-action:none;overflow:visible}
+svg{display:block;width:100%;height:375px;touch-action:none;overflow:visible}
 text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
 .layers{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 2px 14px}.layers label{cursor:pointer}
 .cards{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:12px;margin:10px 2px 0}
@@ -22,7 +22,9 @@ button{background:transparent;color:var(--ink);border:1px solid var(--border);bo
 <label><input type="checkbox" id="show-object" checked> Object trajectory</label>
 <label><input type="checkbox" id="show-minimum" checked> Minimum altitude</label>
 <label><input type="checkbox" id="show-moonlight" checked> Moonlight interference</label>
+<label><input type="checkbox" id="show-clouds" checked> Cloud cover</label>
 </div>
+<div id="cloud-info" style="font-size:12px;margin:0 2px 10px"></div>
 <div class="cards">
  <div class="card"><div class="label">Alt</div><div id="alt" class="value">—</div></div>
  <div class="card"><div class="label">Azi</div><div id="az" class="value">—</div></div>
@@ -42,14 +44,14 @@ const timeFormat=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2
 document.getElementById('datetime-label').textContent=`Time (${data.timezone})`;
 document.getElementById('object-size').textContent=data.object_size;
 let selectedTime=data.times[0], width;
-const plotTop=15,bottom=285,left=45,right=15;
+const plotTop=15,bottom=285,left=45,right=15,cloudTop=292,cloudBottom=310;
 const low=Math.min(0,...data.alt,...(data.horizon||[])), high=Math.max(90,...data.alt,data.minimum,...(data.horizon||[]));
 const minY=Math.floor(low/10)*10,maxY=Math.ceil(high/10)*10;
 const t0=data.times[0], t1=data.times.at(-1);
 const storageKey=`mw-astro-interval:${data.target_key}:${t0}:${t1}`;
 let boundaries=[];
 try{boundaries=Observation.restore(sessionStorage.getItem(storageKey),t0,t1);}catch(_){}
-const layerKey='mw-astro-chart-layers', layerNames=['horizon','object','minimum','moonlight'];
+const layerKey='mw-astro-chart-layers', layerNames=['horizon','object','minimum','moonlight','clouds'];
 try{const saved=JSON.parse(sessionStorage.getItem(layerKey));for(const name of layerNames){if(typeof saved?.[name]==='boolean')document.getElementById('show-'+name).checked=saved[name];}}catch(_){}
 if(!data.horizon)document.getElementById('show-horizon').disabled=true;
 
@@ -62,19 +64,39 @@ function text(value,attrs){const e=el('text',attrs);e.textContent=value;return e
 function path(values,color,dash){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(data.times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
 let marker,guide;
 function draw(){
- width=Math.max(280,svg.getBoundingClientRect().width);svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${width} 335`);
+ width=Math.max(280,svg.getBoundingClientRect().width);svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${width} 375`);
  for(const period of data.astronomical_night||[]){
   const beginning=Math.max(t0,period[0]),ending=Math.min(t1,period[1]);
   if(ending>beginning)el('rect',{'data-astronomical-night':'true',x:x(beginning),y:plotTop,width:x(ending)-x(beginning),height:bottom-plotTop,fill:'#969fc5','fill-opacity':0.16,'pointer-events':'none'});
  }
  if(visible('moonlight'))for(const period of data.moon_interference||[]){
   const beginning=Math.max(t0,period.start),ending=Math.min(t1,period.end);
-  if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffffff','fill-opacity':0.5,'pointer-events':'none'});
+  if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffff00','fill-opacity':0.5,'pointer-events':'none'});
+ }
+ const forecast=data.cloud_forecast,cloudInfo=document.getElementById('cloud-info');
+ cloudInfo.textContent='';
+ if(visible('clouds')){
+  const defs=el('defs',{}),pattern=el('pattern',{id:'cloud-unavailable',width:6,height:6,patternUnits:'userSpaceOnUse'},defs);
+  el('path',{d:'M-1 1L1 -1M0 6L6 0M5 7L7 5',stroke:'#888','stroke-width':1},pattern);
+  el('rect',{'data-cloud-unavailable':'true',x:left,y:cloudTop,width:width-left-right,height:cloudBottom-cloudTop,fill:'url(#cloud-unavailable)'});
+  const limits=forecast?.settings||{clear_max_percent:20,light_max_percent:50,medium_max_percent:80};
+  for(const block of forecast?.segments||[]){
+   const beginning=Math.max(t0,block.start),ending=Math.min(t1,block.end);
+   if(ending<=beginning||block.percent===null)continue;
+   const colour=block.percent<=limits.clear_max_percent?'#e5e7eb':block.percent<=limits.light_max_percent?'#b8bec8':block.percent<=limits.medium_max_percent?'#858e9d':'#4b5563';
+   const rect=el('rect',{'data-cloud-cover':block.percent,x:x(beginning),y:cloudTop,width:x(ending)-x(beginning),height:cloudBottom-cloudTop,fill:colour,stroke:'#606873','stroke-width':0.5});
+   const title=el('title',{},rect);title.textContent=`${timeFormat.format(block.start)}–${timeFormat.format(block.end)} · Cloud cover ${block.percent}%`;
+  }
+  const cloudLabel=el('text',{x:left+4,y:cloudTop+13,fill:'white','pointer-events':'none'});
+  cloudLabel.style.fill='#ffffff';cloudLabel.style.paintOrder='stroke';cloudLabel.style.stroke='#333';cloudLabel.style.strokeWidth='2px';cloudLabel.textContent='Cloud cover';
+  cloudInfo.textContent=forecast?.error||'Hourly total cloud cover: light = clearer · dark = cloudier · hatched = unavailable';
+  if(forecast?.retrieved_at)cloudInfo.textContent+=` · Retrieved ${new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(forecast.retrieved_at))}`;
+  const credit=document.createElement('a');credit.href='https://open-meteo.com/';credit.target='_blank';credit.rel='noopener noreferrer';credit.textContent=' · Forecast: Open-Meteo';cloudInfo.append(credit);
  }
  for(let a=minY;a<=maxY;a+=10){el('line',{x1:left,x2:width-right,y1:y(a),y2:y(a),class:'grid'});text(a,{x:left-8,y:y(a)+4,'text-anchor':'end'});}
  const ticks=Math.max(2,Math.min(6,Math.floor((width-left-right)/75)));
- for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:305,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
- text(`Time (${data.timezone})`,{x:(left+width-right)/2,y:329,'text-anchor':'middle'});
+ for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:335,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
+ text(`Time (${data.timezone})`,{x:(left+width-right)/2,y:359,'text-anchor':'middle'});
  const label=text('Altitude (°)',{x:12,y:(plotTop+bottom)/2,'text-anchor':'middle'});label.setAttribute('transform',`rotate(-90 12 ${(plotTop+bottom)/2})`);
  if(visible('minimum'))el('line',{x1:left,x2:width-right,y1:y(data.minimum),y2:y(data.minimum),stroke:'#e69520','stroke-width':2,'stroke-dasharray':'2 4'});
  if(data.horizon&&visible('horizon'))path(data.horizon,'#c44e52');
@@ -103,7 +125,7 @@ function show(t){
 function renderInterval(pointerTime=null){
  intervalGroup.replaceChildren();
  boundaries.forEach((t,i)=>{
-  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:bottom,stroke:'#bc80ee','stroke-width':2},intervalGroup);
+  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:visible('clouds')?cloudBottom:bottom,stroke:'#bc80ee','stroke-width':2},intervalGroup);
   const label=el('text',{x:Math.min(width-right-32,Math.max(left+3,x(t)+4)),y:plotTop+12+i*14},intervalGroup);
   label.textContent=timeFormat.format(t);
  });
@@ -123,7 +145,12 @@ svg.addEventListener('click',event=>{
 document.getElementById('clear-interval').addEventListener('click',()=>{boundaries=[];saveInterval();renderInterval();});
 svg.addEventListener('pointermove',event=>{
  const bounds=svg.getBoundingClientRect(),px=event.clientX-bounds.left,py=event.clientY-bounds.top;
- if(px<left||px>width-right||py<plotTop||py>bottom){document.getElementById('tip').style.display='none';return;}
+ if(px<left||px>width-right||py<plotTop||py>(visible('clouds')?cloudBottom:bottom)){document.getElementById('tip').style.display='none';return;}
+ if(visible('clouds')&&py>=cloudTop&&py<=cloudBottom){
+  const t=t0+(px-left)/(width-left-right)*(t1-t0),block=(data.cloud_forecast?.segments||[]).find(b=>t>=b.start&&t<b.end);
+  const tip=document.getElementById('tip');tip.textContent=block&&block.percent!==null?`${timeFormat.format(block.start)}–${timeFormat.format(block.end)} · Cloud cover ${block.percent}%`:'Cloud forecast unavailable';
+  tip.style.display='block';tip.style.left=Math.min(width-260,px+12)+'px';tip.style.top=(py-30)+'px';return;
+ }
  show(t0+(px-left)/(width-left-right)*(t1-t0));
  if(boundaries.length===1)renderInterval(selectedTime);
  const tip=document.getElementById('tip');tip.textContent=timeFormat.format(selectedTime);tip.style.display='block';

@@ -16,7 +16,7 @@ PENDING = (
 )
 
 
-def render_planner(target, settings, start, exposure, profile, chart_selection, chart_first, chart_last, moon_data=None):
+def render_planner(target, settings, start, exposure, profile, chart_selection, chart_first, chart_last, moon_data=None, cloud_data=None):
     try:
         rules=load_rules()
     except (OSError,ValueError,TypeError) as exc:
@@ -70,6 +70,34 @@ def render_planner(target, settings, start, exposure, profile, chart_selection, 
             st.write(f"Moon phase at observation start: {feedback['phase']} — {feedback['illumination']:.0f}% illuminated")
         else:
             st.write('Select start and stop times to assess moonlight interference')
+        st.markdown('<h3 style="color:#4c9be8;font-size:clamp(16px,3.5vw,25px);font-weight:500;margin:16px 0 10px">Cloud cover</h3>',unsafe_allow_html=True)
+        if report and cloud_data is not None:
+            from cloud_forecast import summarise_cloud_window
+            from datetime import datetime
+            cloud=summarise_cloud_window(cloud_data,plan.start,plan.end)
+            report.cloud_feedback=cloud
+            known=cloud['average'] is not None
+            partial=cloud['missing_seconds']>.5
+            def cloud_row(label,value,good):
+                symbol='—' if value is None or partial else '✅' if good else '❌'
+                st.write(f'{symbol} {label}: {value:.0f}%' if value is not None else f'— {label}: unavailable')
+            cloud_row('Average forecast cloud cover',cloud['average'],known and cloud['average']<=cloud['limit'])
+            cloud_row('Highest forecast cloud cover',cloud['highest'],known and cloud['highest']<=cloud['limit'])
+            if known:
+                mark='—' if partial else '✅' if cloud['exceeded_percent']==0 else '❌'
+                st.write(f"{mark} Cloud cover exceeds your preferred limit ({cloud['limit']:g}%) for: {cloud['exceeded_percent']:.0f}% ({cloud['exceeded_duration']}) of the observation")
+            else:
+                st.write('— Time above your preferred cloud-cover limit: unavailable')
+            retrieved=cloud['retrieved_at']
+            timestamp=datetime.fromisoformat(retrieved).astimezone(plan.start.tzinfo).strftime('%d %b, %H:%M') if retrieved else 'unavailable'
+            st.write(f'Forecast retrieved: {timestamp} · Open-Meteo')
+            if partial:
+                st.write(f"Forecast unavailable for {cloud['missing_duration']} of the observation")
+                if known:st.write('Average and highest cloud cover use only the available forecast period.')
+            if cloud['error']:st.write(cloud['error'])
+        else:
+            for label in ('Average forecast cloud cover','Highest forecast cloud cover','Time above your preferred cloud-cover limit','Forecast retrieved'):
+                st.write(f'— {label}: select start and stop times')
         if report:
             needs_ack=any(c.status=='Challenging' for c in report.checks)
             # Key acknowledgements to the actual plan, so editing invalidates consent.

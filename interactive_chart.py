@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=()):
+def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None):
     import math
     if not math.isfinite(exposure_seconds) or exposure_seconds <= 0:
         raise ValueError("Exposure must be positive and finite.")
@@ -14,6 +14,7 @@ def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable",
         "times": [int(t.timestamp() * 1000) for t in times],
         "alt": frame["Altitude (°)"].tolist(),
         "az": frame["Azimuth (°)"].tolist(),
+        "cloud_forecast": cloud_forecast,
         "moon_interference": list(moon_intervals),
         "horizon": frame["Horizon (°)"].tolist() if "Horizon (°)" in frame else None,
         "minimum": float(minimum_altitude_deg), "timezone": timezone,
@@ -35,7 +36,7 @@ from functools import lru_cache
 def chart_component():
     from streamlit.components.v2 import component
     return component('observation_chart',
-        html='<iframe title="Target altitude chart" style="width:100%;height:685px;border:0" sandbox="allow-scripts allow-same-origin"></iframe>',
+        html='<iframe title="Target altitude chart" style="width:100%;height:765px;border:0" sandbox="allow-scripts allow-same-origin"></iframe>',
         js=Path(__file__).with_name('chart_bridge.js').read_text())
 
 

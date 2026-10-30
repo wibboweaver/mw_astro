@@ -23,7 +23,7 @@ def clear_caches(tmp_path, monkeypatch):
     from PIL import Image
     image = BytesIO()
     Image.new("RGB", (600, 600)).save(image, format="JPEG")
-    with patch("catalogue.load_catalogue", return_value=()), patch("reference_images.fetch_preview", return_value=image.getvalue()):
+    with patch("catalogue.load_catalogue", return_value=()), patch("reference_images.fetch_preview", return_value=image.getvalue()), patch("cloud_forecast.fetch_cloud_forecast", return_value=dict(segments=[],retrieved_at=None,error="Cloud forecast unavailable")):
         yield
     st.cache_data.clear()
 
@@ -357,7 +357,7 @@ def test_inline_checklist_is_fixed_and_has_no_dialog():
         assert not app.get('dialog')
         assert not any(b.label=='Review imaging plan' for b in app.button)
         assert next(b for b in app.button if b.label=='Accept plan').disabled
-        lines=[m.value for m in app.markdown if m.value.startswith(('✅','❌'))]
+        lines=[m.value for m in app.markdown if m.value.startswith(('✅','❌')) and 'forecast cloud cover' not in m.value and 'Cloud cover exceeds' not in m.value]
         assert len(lines)==11
         assert lines[0].startswith('✅ Object is above the minimum altitude')
         assert lines[3].startswith('❌ Object is below the minimum altitude')
@@ -366,10 +366,10 @@ def test_inline_checklist_is_fixed_and_has_no_dialog():
         assert lines[-1].startswith('❌ The object is either below the minimum specified altitude or obscured by the local horizon for ')
         assert any(e.label=='Observation Feedback' for e in app.expander)
         headings=[m.value for m in app.markdown if m.value.startswith('<h3')]
-        assert len(headings)==4
+        assert len(headings)==5
         assert all('color:#4c9be8' in h and 'font-size:clamp(16px,3.5vw,25px)' in h for h in headings)
         app.run()
-        assert [m.value for m in app.markdown if m.value.startswith(('✅','❌'))]==lines
+        assert [m.value for m in app.markdown if m.value.startswith(('✅','❌')) and 'forecast cloud cover' not in m.value and 'Cloud cover exceeds' not in m.value]==lines
 
 
 @pytest.mark.parametrize('points,message', [([], 'Missing start and stop'), ([0], 'Missing stop')])

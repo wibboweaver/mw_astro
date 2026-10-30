@@ -12,7 +12,7 @@ duration_hours = 12
 step_minutes = 10
 minimum_altitude_deg = 40.0
 evening_date = "2026-10-30"
-start_minute = 25
+start_minute = 11
 visibility_mode = "During window"
 
 exposure_seconds = 300.0
@@ -61,3 +61,10 @@ preferred_exposures = 30
 [planning_rules.timing]
 late_start_hour = 23
 early_hours_end = 6
+
+# Open-Meteo hourly total cloud cover; forecast percentages, not target obstruction.
+[cloud_forecast]
+enabled = true
+clear_max_percent = 20
+light_max_percent = 50
+medium_max_percent = 80

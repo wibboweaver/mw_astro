@@ -328,6 +328,16 @@ try:
 except (OSError,ValueError,TypeError) as exc:
     st.error(f'Check planning_rules in config.toml: {exc}')
     st.stop()
+from cloud_forecast import load_cloud_settings, forecast_for_chart, fetch_cloud_forecast
+@st.cache_data(show_spinner=False,ttl=1800,max_entries=16)
+def cached_cloud_forecast(first,last,latitude,longitude,cloud_settings):
+    return forecast_for_chart(first,last,latitude,longitude,cloud_settings,fetcher=fetch_cloud_forecast)
+try:
+    cloud_settings=load_cloud_settings(configuration.CONFIG_PATH)
+    cloud_data=cached_cloud_forecast(frame['Time'].iloc[0].to_pydatetime(),frame['Time'].iloc[-1].to_pydatetime(),latitude,longitude,cloud_settings)
+except (OSError,ValueError,TypeError) as exc:
+    st.error(f'Check cloud_forecast in config.toml: {exc}')
+    st.stop()
 night_periods = cached_night(date, settings.timezone, frame["Time"].iloc[0].to_pydatetime(),
                              frame["Time"].iloc[-1].to_pydatetime(), latitude, longitude, height)
 night_description = night_text(night_periods, date, settings.timezone)
@@ -342,10 +352,10 @@ else:
 with chart_column:
     renderer = chart_renderer(Path(interactive_chart.__file__).stat().st_mtime_ns)
     chart_content = renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
-                  exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", night_periods=night_periods, moon_intervals=moon_data["intervals"])
+                  exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", night_periods=night_periods, moon_intervals=moon_data["intervals"], cloud_forecast=cloud_data)
     interval_key = "observation:" + hashlib.sha256(f"{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]
     chart_selection = interactive_chart.render_chart(chart_content, interval_key)
-    render_planner(target, settings, start, exposure, horizon_profile, chart_selection, frame["Time"].iloc[0], frame["Time"].iloc[-1], moon_data=moon_data)
+    render_planner(target, settings, start, exposure, horizon_profile, chart_selection, frame["Time"].iloc[0], frame["Time"].iloc[-1], moon_data=moon_data, cloud_data=cloud_data)
     filter_recommended, filter_reason = recommend_db2(target.object_id)
     st.checkbox("ZWO DB2 dual-band filter recommended", value=filter_recommended, disabled=True,
                 help=filter_reason, key=f"filter_recommendation:{target.object_id}")

@@ -106,6 +106,7 @@ class Report:
     exposures: int
     integration_minutes: float
     moon_feedback: dict | None = None
+    cloud_feedback: dict | None = None
 
     @property
     def status(self):
@@ -292,7 +293,7 @@ def save_accepted(plan, report, rules, directory, acknowledged=False):
     from configuration import _atomic_write
     if not rules['enabled'] or not report.can_accept(rules,acknowledged):
         raise ValueError('Resolve blockers and acknowledge allowed advisories before accepting.')
-    payload = dict(schema_version=1,status='accepted',execution_status='not_armed',accepted_at=datetime.now(timezone.utc).isoformat(),acknowledged=acknowledged,plan={**asdict(plan),'start':plan.start.isoformat(),'end':plan.end.isoformat()},report={'status':report.status,'checks':[asdict(c) for c in report.checks],'exposures':report.exposures,'integration_minutes':report.integration_minutes,'moon_feedback':report.moon_feedback},rules=rules)
+    payload = dict(schema_version=1,status='accepted',execution_status='not_armed',accepted_at=datetime.now(timezone.utc).isoformat(),acknowledged=acknowledged,plan={**asdict(plan),'start':plan.start.isoformat(),'end':plan.end.isoformat()},report={'status':report.status,'checks':[asdict(c) for c in report.checks],'exposures':report.exposures,'integration_minutes':report.integration_minutes,'moon_feedback':report.moon_feedback,'cloud_feedback':report.cloud_feedback},rules=rules)
     directory = Path(directory)
     directory.mkdir(parents=True,exist_ok=True)
     destination = directory/(str(uuid.uuid4())+'.json')

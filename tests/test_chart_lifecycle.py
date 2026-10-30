@@ -26,7 +26,7 @@ class Element {
 }
 const elements={};const get=id=>elements[id]??(elements[id]=new Element());
 let resize;const events=[];
-const ctx={Intl,console,document:{getElementById:get,createElementNS:()=>new Element()},sessionStorage:{getItem:()=>null,setItem:()=>{}},window:{parent:{postMessage:e=>events.push(e)}},ResizeObserver:class{constructor(cb){resize=cb;}observe(){}}};
+const ctx={Intl,console,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},sessionStorage:{getItem:()=>null,setItem:()=>{}},window:{parent:{postMessage:e=>events.push(e)}},ResizeObserver:class{constructor(cb){resize=cb;}observe(){}}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),ctx);
 const plot=get('plot');
 const group=()=>plot.children.find(e=>e.attrs.id==='interval-lines');
