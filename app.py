@@ -18,10 +18,16 @@ from framing import field_of_view, fit_preview_field, framing_data, render_frami
 from astronomical_night import night_for_chart, night_text
 from object_sizes import object_size_label
 from filter_recommendations import recommend_db2
+import reference_images
+if getattr(reference_images, '_loaded_source_stamp', None) != Path(reference_images.__file__).stat().st_mtime_ns:
+    import importlib
+    importlib.reload(reference_images)
 from reference_images import fetch_preview, preview_fov, PreviewError
 
 import importlib
 import interactive_chart
+if getattr(interactive_chart, '_loaded_source_stamp', None) != Path(interactive_chart.__file__).stat().st_mtime_ns:
+    importlib.reload(interactive_chart)
 from streamlit.components.v1 import html
 import streamlit as st
 
@@ -67,7 +73,7 @@ def cached_lookup(name):
 
 
 @st.cache_data(show_spinner=False, ttl=604800, max_entries=100)
-def cached_preview(ra_deg, dec_deg, fov_deg):
+def cached_preview(ra_deg, dec_deg, fov_deg, source_version=None):
     return fetch_preview(ra_deg, dec_deg, fov_deg)
 
 
@@ -311,10 +317,22 @@ else:
     selected = target.common_name
     st.session_state["selected_target"] = selected
 frame = tracks[selected].copy()
+from planning import load_rules
+from moon_interference import calculate_moonlight
+@st.cache_data(show_spinner=False, max_entries=12)
+def cached_moonlight(first,last,latitude,longitude,height,ra,dec,step,rules):
+    return calculate_moonlight(first,last,latitude,longitude,height,ra,dec,step,rules)
+try:
+    planning_rules=load_rules()
+    moon_data=cached_moonlight(frame['Time'].iloc[0].to_pydatetime(),frame['Time'].iloc[-1].to_pydatetime(),latitude,longitude,height,target.ra_deg,target.dec_deg,planning_rules['visibility']['sample_interval_minutes'],planning_rules['moon'])
+except (OSError,ValueError,TypeError) as exc:
+    st.error(f'Check planning_rules in config.toml: {exc}')
+    st.stop()
 night_periods = cached_night(date, settings.timezone, frame["Time"].iloc[0].to_pydatetime(),
                              frame["Time"].iloc[-1].to_pydatetime(), latitude, longitude, height)
 night_description = night_text(night_periods, date, settings.timezone)
 st.subheader(selected)
+from planning_ui import render_planner
 if horizon_profile is not None:
     frame["Horizon (°)"] = horizon_altitudes(horizon_profile, frame["Azimuth (°)"].to_numpy())
 if show_preview:
@@ -323,8 +341,11 @@ else:
     chart_column, image_column = st.container(), None
 with chart_column:
     renderer = chart_renderer(Path(interactive_chart.__file__).stat().st_mtime_ns)
-    html(renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
-                  exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", night_periods=night_periods), height=635)
+    chart_content = renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
+                  exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", night_periods=night_periods, moon_intervals=moon_data["intervals"])
+    interval_key = "observation:" + hashlib.sha256(f"{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]
+    chart_selection = interactive_chart.render_chart(chart_content, interval_key)
+    render_planner(target, settings, start, exposure, horizon_profile, chart_selection, frame["Time"].iloc[0], frame["Time"].iloc[-1], moon_data=moon_data)
     filter_recommended, filter_reason = recommend_db2(target.object_id)
     st.checkbox("ZWO DB2 dual-band filter recommended", value=filter_recommended, disabled=True,
                 help=filter_reason, key=f"filter_recommendation:{target.object_id}")
@@ -334,10 +355,10 @@ if image_column is not None:
     with image_column:
         try:
             with st.spinner("Loading DSS2 image…"):
-                image_bytes = cached_preview(target.ra_deg, target.dec_deg, fov)
+                image_bytes = cached_preview(target.ra_deg, target.dec_deg, fov, Path(reference_images.__file__).stat().st_mtime_ns)
         except PreviewError as exc:
             st.warning(str(exc))
-            st.button("Retry image", key="retry_image")
+            st.button("Retry image", key="retry_image", on_click=cached_preview.clear)
         else:
             data = framing_data(image_bytes, focal_length, sensor_width, sensor_height, fov,
                                 settings.frame_rotation_deg, int(camera_width), int(camera_height),

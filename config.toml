@@ -11,11 +11,11 @@ start_hour = 18
 duration_hours = 12
 step_minutes = 10
 minimum_altitude_deg = 40.0
-evening_date = "2026-10-29"
+evening_date = "2026-11-18"
 start_minute = 25
 visibility_mode = "During window"
 
-exposure_seconds = 120.0
+exposure_seconds = 300.0
 [targets]
 target_source = "Automatic catalogue"
 catalogue_scope = "Named and Messier objects"
@@ -30,6 +30,34 @@ focal_length_mm = 550.0
 sensor_width_mm = 23.5
 sensor_height_mm = 15.7
 frame_rotation_deg = 0.0
-frame_zoom = 1.0
 camera_width_px = 6248
 camera_height_px = 4176
+
+ # Imaging-session validation thresholds. Acceptance does not arm equipment.
+[planning_rules]
+enabled = true
+allow_warning_override = true
+
+[planning_rules.darkness]
+preferred_sun_altitude = -18.0
+
+[planning_rules.visibility]
+sample_interval_minutes = 2
+
+# Broadband estimate: Moon above the astronomical horizon, at least 30% lit,
+# and within 60 degrees of the target OR at least 70% lit at any separation.
+# Stronger shading when at least 70% lit and within 30 degrees.
+[planning_rules.moon]
+enabled = true
+broadband_min_separation = 60.0
+broadband_critical_separation = 30.0
+high_illumination_percent = 70.0
+low_illumination_percent = 30.0
+
+[planning_rules.integration]
+preferred_minutes = 90.0
+preferred_exposures = 30
+
+[planning_rules.timing]
+late_start_hour = 23
+early_hours_end = 6

@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 config.toml.lock
 .settings-update-backups/
+
+# Accepted observing plans
+plans/

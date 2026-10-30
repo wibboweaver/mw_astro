@@ -37,7 +37,7 @@ def test_valid_jpeg_response():
     Image.new('RGB', (600, 600)).save(output, format='JPEG')
     with patch('reference_images.urlopen', return_value=BytesIO(output.getvalue())) as request:
         assert fetch_preview(10, 40, 1) == output.getvalue()
-        assert request.call_args.kwargs['timeout'] == 12
+        assert request.call_args.kwargs['timeout'] == 6
 
 
 @pytest.mark.parametrize('body', [b'<html>upstream error</html>', b'{"error": "no image"}'])
@@ -51,3 +51,36 @@ def test_network_failure_is_friendly_error():
     with patch('reference_images.urlopen', side_effect=URLError('offline')):
         with pytest.raises(PreviewError):
             fetch_preview(10, 40, 1)
+
+
+
+def jpeg():
+    output=BytesIO()
+    Image.new('RGB',(600,600)).save(output,format='JPEG')
+    return output.getvalue()
+
+
+def test_cds_mirror_recovers_primary_failure():
+    from reference_images import MIRROR_ENDPOINT
+    image=jpeg()
+    with patch('reference_images.urlopen',side_effect=[URLError('timeout'),BytesIO(image)]) as request:
+        assert fetch_preview(10,40,1)==image
+        assert request.call_args.args[0].startswith(MIRROR_ENDPOINT)
+        assert request.call_count==2
+
+
+
+def test_both_cds_failures_show_unavailable_without_substitute():
+    from reference_images import ENDPOINT, MIRROR_ENDPOINT
+    with patch('reference_images.urlopen',side_effect=URLError('offline')) as request:
+        with pytest.raises(PreviewError,match='DSS2 colour preview is currently unavailable'):
+            fetch_preview(10,40,1)
+        assert request.call_count==2
+        assert [urlparse(c.args[0]).netloc for c in request.call_args_list]==[
+            urlparse(ENDPOINT).netloc,urlparse(MIRROR_ENDPOINT).netloc]
+
+
+def test_corrupt_primary_image_uses_mirror():
+    image=jpeg()
+    with patch('reference_images.urlopen',side_effect=[BytesIO(b'not an image'),BytesIO(image)]):
+        assert fetch_preview(10,40,1)==image
