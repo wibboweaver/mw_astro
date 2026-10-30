@@ -39,6 +39,13 @@ def start_custom():
     return app
 
 
+def chart_frames(app):
+    import json
+    from types import SimpleNamespace
+    return [SimpleNamespace(proto=SimpleNamespace(srcdoc=json.loads(item.proto.json)['html']))
+            for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name]
+
+
 def target_names(app):
     return list(app.dataframe[0].value['Common name'])
 
@@ -72,9 +79,11 @@ def test_table_filters_retains_selection_and_reuses_tracks():
         assert calculate.call_args.args[4].hour == 20
         assert calculate.call_args.args[4].minute == 30
         resolver.assert_not_called()
-        content = app.get('iframe')[0].proto.srcdoc
+        content = chart_frames(app)[0].proto.srcdoc
         assert 'pointermove' in content and 'id="alt"' in content
-        assert not app.text_input and not app.main.caption
+        assert not app.text_input
+        assert not app.time_input
+        assert not any(n.label == "Session exposure (seconds)" for n in app.number_input)
 
 
 def test_selected_target_removed_by_custom_horizon(tmp_path):
@@ -89,11 +98,11 @@ def test_selected_target_removed_by_custom_horizon(tmp_path):
         assert target_names(app) == ['Fixture high']
         assert app.session_state['selected_target'] == 'Fixture high'
         assert calculate.call_count == 1
-        assert '"horizon": [60.0, 60.0]' in app.get('iframe')[0].proto.srcdoc
+        assert '"horizon": [60.0, 60.0]' in chart_frames(app)[0].proto.srcdoc
         app.sidebar.slider(key='sidebar_minimum').set_value(80.0).run()
         assert any('No targets meet' in item.value for item in app.warning)
         assert not app.dataframe
-        assert not app.get('iframe')
+        assert not chart_frames(app)
 
 
 def test_empty_catalogue_explains_required_source():
@@ -101,7 +110,7 @@ def test_empty_catalogue_explains_required_source():
         app = start_custom()
         assert not app.exception
         assert 'No target catalogue' in app.warning[0].value
-        assert not app.get('iframe')
+        assert not chart_frames(app)
 
 
 def test_automatic_catalogue_needs_no_list_and_selection_is_cached():
@@ -111,7 +120,7 @@ def test_automatic_catalogue_needs_no_list_and_selection_is_cached():
         assert target_names(app) == ['Fixture high', 'Fixture low']
         select_target(app, 'Fixture low')
         assert calculate.call_count == 1
-        assert len(app.get('iframe')) == 1
+        assert len(chart_frames(app)) == 1
         resolver.assert_not_called()
         assert not app.file_uploader
 
@@ -133,7 +142,7 @@ def test_reference_image_is_cached_and_failure_does_not_hide_chart():
         fetch.side_effect = PreviewError('DSS2 preview is unavailable. Please try again later.')
         app.run()
         assert not app.exception
-        assert len(app.get('iframe')) == 1
+        assert len(chart_frames(app)) == 1
         assert 'unavailable' in app.warning[0].value
 
 
@@ -145,7 +154,7 @@ def test_manual_lookup_without_catalogue_keeps_chart_preview_and_resolved_target
         next(b for b in app.button if b.label == 'Look up').click().run()
         assert not app.exception
         assert app.subheader[0].value == 'Manual fixture'
-        assert len(app.get('iframe')) == 1
+        assert len(chart_frames(app)) == 1
         assert any('STScI/NASA' in item.value for item in app.main.markdown)
         app.sidebar.slider(key='sidebar_start_time').set_value(time(20,30)).run()
         resolver.assert_called_once_with('Manual fixture')
@@ -153,7 +162,7 @@ def test_manual_lookup_without_catalogue_keeps_chart_preview_and_resolved_target
         assert app.subheader[0].value == 'Manual fixture'
         # Outside the visibility limit still shows an explicitly requested object.
         app.sidebar.slider(key='sidebar_minimum').set_value(80.0).run()
-        assert len(app.get('iframe')) == 1
+        assert len(chart_frames(app)) == 1
         assert any('does not meet' in w.value for w in app.sidebar.warning)
 
 
@@ -169,7 +178,7 @@ def test_manual_lookup_errors_do_not_show_stale_chart(name, failure, message):
         app.text_input[0].set_value(name)
         next(b for b in app.button if b.label == 'Look up').click().run()
         assert not app.exception
-        assert not app.get('iframe')
+        assert not chart_frames(app)
         assert any(message in el.value for el in [*app.warning, *app.error])
         if not name:
             resolver.assert_not_called()
@@ -238,7 +247,7 @@ def test_save_failure_is_visible_and_chart_still_works():
         app = AppTest.from_file(APP, default_timeout=20).run()
         app.sidebar.slider(key='sidebar_minimum').set_value(45.0).run()
         assert not app.exception
-        assert len(app.get('iframe')) == 1
+        assert len(chart_frames(app)) == 1
         assert any('could not be saved' in e.value for e in app.sidebar.error)
 
 
@@ -252,7 +261,7 @@ def test_exposure_control_and_filter_recommendation():
         assert recommendation.value and recommendation.disabled
         app.sidebar.select_slider(key='sidebar_exposure').set_value(240.0).run()
         assert not app.exception
-        assert '"exposure_seconds": 240.0' in app.get('iframe')[0].proto.srcdoc
+        assert '"exposure_seconds": 240.0' in chart_frames(app)[0].proto.srcdoc
         with patch('filter_recommendations.recommend_db2',return_value=(False,'Broadband target')):
             select_target(app, 'Fixture low')
             assert not next(box for box in app.checkbox if 'filter recommended' in box.label).value
@@ -268,12 +277,12 @@ def test_night_times_appear_under_reference_links_and_survive_image_failure():
         times=next(i for i,text in enumerate(markdown) if 'Astronomical night (Europe/London)' in text)
         assert times > links
         assert 'Start:' in markdown[times] and 'End:' in markdown[times]
-        assert '"astronomical_night": [[' in app.get('iframe')[0].proto.srcdoc
+        assert '"astronomical_night": [[' in chart_frames(app)[0].proto.srcdoc
         st.cache_data.clear()
         with patch('reference_images.fetch_preview',side_effect=PreviewError('Unavailable')):
             app.run()
             assert any('Astronomical night' in item.value for item in app.main.markdown)
-            assert len(app.get('iframe'))==1
+            assert len(chart_frames(app))==1
 
 
 def test_visible_target_table_selects_and_filters():
@@ -328,10 +337,69 @@ def test_clearing_row_hides_chart_and_reselecting_updates_details():
         app=AppTest.from_file(APP, default_timeout=20).run()
         assert app.main.subheader[-1].value == 'Fixture high'
         select_target(app, None)
-        assert not app.exception and not app.get('iframe')
+        assert not app.exception and not chart_frames(app)
         assert len(app.dataframe)==1
         select_target(app, 'Fixture low')
         assert not app.exception
         assert app.main.subheader[-1].value=='Fixture low'
         assert app.session_state['selected_target']=='Fixture low'
-        assert '10:40' in app.get('iframe')[0].proto.srcdoc
+        assert '10:40' in chart_frames(app)[0].proto.srcdoc
+
+
+def test_inline_checklist_is_fixed_and_has_no_dialog():
+    from datetime import datetime, timezone
+    from planning import Plan, checklist_report, DEFAULTS
+    p=Plan('Fixture',datetime(2026,10,29,20,tzinfo=timezone.utc),datetime(2026,10,30,1,tzinfo=timezone.utc),180)
+    report=checklist_report(p,DEFAULTS,40,[50,20],[0,30],[-20,-10],40)
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('planning_ui.evaluate_checklist',return_value=report), patch('interactive_chart.selected_interval',return_value=(p.start,p.end)):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert not app.get('dialog')
+        assert not any(b.label=='Review imaging plan' for b in app.button)
+        assert next(b for b in app.button if b.label=='Accept plan').disabled
+        lines=[m.value for m in app.markdown if m.value.startswith(('✅','❌'))]
+        assert len(lines)==11
+        assert lines[0].startswith('✅ Object is above the minimum altitude')
+        assert lines[3].startswith('❌ Object is below the minimum altitude')
+        assert lines[5]=='❌ Astronomical night is not occurring'
+        assert lines[-2].startswith('❌ The object is obscured for ')
+        assert lines[-1].startswith('❌ The object is either below the minimum specified altitude or obscured by the local horizon for ')
+        assert any(e.label=='Observation Feedback' for e in app.expander)
+        headings=[m.value for m in app.markdown if m.value.startswith('<h3')]
+        assert len(headings)==4
+        assert all('color:#4c9be8' in h and 'font-size:clamp(16px,3.5vw,25px)' in h for h in headings)
+        app.run()
+        assert [m.value for m in app.markdown if m.value.startswith(('✅','❌'))]==lines
+
+
+@pytest.mark.parametrize('points,message', [([], 'Missing start and stop'), ([0], 'Missing stop')])
+def test_planner_reports_missing_chart_times(points,message):
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('interactive_chart.render_chart') as chart, patch('planning_ui.evaluate_checklist') as evaluate:
+        def selection(content,key):
+            import json
+            payload=json.loads(content.split('const data=')[1].split(';')[0])
+            return {'interval':[payload['times'][0] for _ in points]}
+        chart.side_effect=selection
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert any(message in e.value for e in app.error)
+        evaluate.assert_not_called()
+
+
+def test_planner_uses_chart_interval_and_current_sidebar_exposure():
+    from planning import Report, Check
+    import json
+    captured={}
+    def selection(content,key):
+        payload=json.loads(content.split('const data=')[1].split(';')[0])
+        captured['times']=payload['times']
+        return {'interval':list(reversed(payload['times']))}
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('interactive_chart.render_chart',side_effect=selection), patch('planning_ui.evaluate_checklist',return_value=Report([Check('Weather','Unknown','Check forecast')],20,80)) as evaluate:
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        app.sidebar.select_slider(key='sidebar_exposure').set_value(240.0).run()
+        assert not app.exception
+        plan=evaluate.call_args.args[0]
+        assert plan.exposure_seconds==240
+        assert [int(plan.start.timestamp()*1000),int(plan.end.timestamp()*1000)]==captured['times']
+        assert not app.time_input
+        assert not any(n.label=='Session exposure (seconds)' for n in app.number_input)

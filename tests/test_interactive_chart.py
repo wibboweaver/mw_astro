@@ -49,3 +49,32 @@ def test_astronomical_night_rectangle_is_behind_lines_and_clipped_to_plot():
     assert html.index("'data-astronomical-night'") < html.index('for(let a=minY;')
     assert 'beginning=Math.max(t0,period[0]),ending=Math.min(t1,period[1])' in html
     assert "'pointer-events':'none'" in html
+
+
+
+def test_selected_interval_missing_invalid_reversed_and_dst():
+    from datetime import datetime, timezone
+    import pytest
+    from interactive_chart import selected_interval
+    first=datetime(2026,10,24,23,tzinfo=timezone.utc)
+    last=datetime(2026,10,25,5,tzinfo=timezone.utc)
+    a,b=first.timestamp()*1000,last.timestamp()*1000
+    for value, message in [({},'Missing start and stop'),({'interval':[a]},'Missing stop'),({'interval':[a,a]},'must be different'),({'interval':[a,b+1]},'outside'),({'interval':[float('nan')]},'outside')]:
+        with pytest.raises(ValueError,match=message):selected_interval(value,first,last)
+    assert selected_interval({'interval':[b,a]},first,last)==(first,last)
+    assert (last-first).total_seconds()==6*3600
+
+
+def test_moon_band_payload_and_layer_controls():
+    times=pd.to_datetime(['2026-10-30T18:00Z','2026-10-31T06:00Z'])
+    periods=[dict(start=times[0].timestamp()*1000,end=times[1].timestamp()*1000,level='possible')]
+    frame=pd.DataFrame({'Time':times,'Altitude (°)':[40,50],'Azimuth (°)':[90,100]})
+    html=chart_html(frame,40,'Europe/London',moon_intervals=periods)
+    data=json.loads(html.split('const data=')[1].split(';')[0])
+    assert data['moon_interference']==periods
+    assert 'moon' not in data
+    for name in ('horizon','object','minimum','moonlight'):
+        assert f'id="show-{name}"' in html
+    assert 'Moon trajectory' not in html
+    assert "'data-moon-interference'" in html
+    assert 'if(boundaries.length===1)renderInterval(selectedTime)' in html

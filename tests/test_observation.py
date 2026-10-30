@@ -33,6 +33,10 @@ assert.deepEqual(p.select(points,end+1,start,end),points);
 assert.deepEqual(p.restore(JSON.stringify(points),start,end),points);
 assert.deepEqual(p.restore('bad',start,end),[]);
 assert.deepEqual(p.restore(JSON.stringify([end+1]),start,end),[]);
+assert.deepEqual(p.summary([start],300,start+11100000),{seconds:11100,images:37});
+assert.deepEqual(p.summary([start],300,start+600000),{seconds:600,images:2});
+assert.deepEqual(p.summary([start,start+3600000],300,start+7200000),{seconds:3600,images:12});
+assert.deepEqual(p.summary([],300,start+600000),null);
 assert.throws(()=>p.summary(points,0));
 assert.throws(()=>p.summary(points,NaN));
 '''

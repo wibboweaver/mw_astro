@@ -9,8 +9,9 @@
     // A third click begins a fresh two-click interval.
     return points.length === 2 ? [timestamp] : [...points, timestamp];
   }
-  function summary(points, exposureSeconds) {
+  function summary(points, exposureSeconds, pointerTime=null) {
     if (!Number.isFinite(exposureSeconds) || exposureSeconds <= 0) throw new Error('Exposure must be positive.');
+    if (points.length === 1 && Number.isFinite(pointerTime)) points = [points[0], Math.round(pointerTime/1000)*1000];
     if (points.length !== 2) return null;
     const seconds = Math.round(Math.abs(points[1] - points[0]) / 1000);
     return {seconds, images: Math.floor(seconds / exposureSeconds)};
