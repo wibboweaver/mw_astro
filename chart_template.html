@@ -133,6 +133,8 @@ svg.addEventListener('pointerleave',()=>{document.getElementById('tip').style.di
 for(const name of layerNames){document.getElementById('show-'+name).onchange=()=>{
 try{sessionStorage.setItem(layerKey,JSON.stringify(Object.fromEntries(layerNames.map(n=>[n,visible(n)]))));}catch(_){}
 draw();};}
+// Initialise before pointer events or parent updates; ResizeObserver is asynchronous.
+draw();
 new ResizeObserver(draw).observe(svg);
 publishInterval();
 </script></body></html>

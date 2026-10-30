@@ -63,4 +63,4 @@ def selected_interval(value, first, last):
     return tuple(datetime.fromtimestamp(point/1000, timezone.utc) for point in (begin,end))
 
 
-_loaded_source_stamp = Path(__file__).stat().st_mtime_ns
+_loaded_source_stamp = (Path(__file__).stat().st_mtime_ns, Path(__file__).with_name('chart_bridge.js').stat().st_mtime_ns)

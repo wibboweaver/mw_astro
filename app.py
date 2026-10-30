@@ -26,7 +26,7 @@ from reference_images import fetch_preview, preview_fov, PreviewError
 
 import importlib
 import interactive_chart
-if getattr(interactive_chart, '_loaded_source_stamp', None) != Path(interactive_chart.__file__).stat().st_mtime_ns:
+if getattr(interactive_chart, '_loaded_source_stamp', None) != (Path(interactive_chart.__file__).stat().st_mtime_ns, Path(interactive_chart.__file__).with_name('chart_bridge.js').stat().st_mtime_ns):
     importlib.reload(interactive_chart)
 from streamlit.components.v1 import html
 import streamlit as st
