@@ -5,6 +5,7 @@ from pathlib import Path
 import csv
 import math
 import logging
+import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -78,11 +79,22 @@ def fetch_preview(ra_deg,dec_deg,fov_deg):
     last_error=None
     for endpoint in (ENDPOINT,MIRROR_ENDPOINT):
         try:
-            return _jpeg(_download(endpoint+'?'+url.split('?',1)[1],timeout=6))
+            return _jpeg(_download(endpoint+'?'+url.split('?',1)[1],timeout=30))
         except (OSError,ValueError) as exc:
             last_error=exc
             logging.getLogger(__name__).warning('DSS2 provider %s failed: %s',endpoint,exc)
     raise PreviewError('DSS2 colour preview is currently unavailable. Please retry later.') from last_error
+
+
+def preview_needs_request(entry,source_version,now=None):
+    """Keep good images; expire transient failures and invalidate errors after code updates."""
+    if entry is None:
+        return True
+    if not entry.get('error'):
+        return False
+    now=time.monotonic() if now is None else now
+    return entry.get('source_version')!=source_version or now>=entry.get('retry_after',0)
+
 
 
 _loaded_source_stamp = Path(__file__).stat().st_mtime_ns

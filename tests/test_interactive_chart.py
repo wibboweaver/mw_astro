@@ -11,16 +11,16 @@ def test_chart_has_local_time_continuous_readout_and_exact_time_range():
     assert data["times"][-1] == int(frame["Time"].iloc[-1].timestamp()*1000)
     assert data["horizon"] == [10, 20]
     assert data["timezone"] == "Europe/London"
-    assert "tip.textContent=timeFormat.format(selectedTime)" in html
+    assert "Astronomical twilight:" in html and ":timeFormat.format(selectedTime)" in html
     assert "svg.addEventListener('pointermove'" in html
     assert 'document.getElementById(\'alt\').textContent' in html
 
 
 def test_time_only_readout_and_separate_catalogue_size_box():
     frame = pd.DataFrame({'Time': pd.to_datetime(['2026-10-21T17:00Z','2026-10-21T18:00Z']), 'Altitude (°)': [40,50], 'Azimuth (°)': [90,100]})
-    html = chart_html(frame,40,'Europe/London','18 × 10 arcmin')
+    html = chart_html(frame,40,'Europe/London','18 × 10′')
     data = json.loads(html.split('const data=')[1].split(';')[0])
-    assert data['object_size'] == '18 × 10 arcmin'
+    assert data['object_size'] == '18 × 10′'
     assert 'id="object-size"' in html
     assert 'Date/time' not in html and 'dateFormat' not in html
     assert "document.getElementById('datetime').textContent=timeFormat.format(selectedTime)" in html
@@ -78,3 +78,49 @@ def test_moon_band_payload_and_layer_controls():
     assert 'Moon trajectory' not in html
     assert "'data-moon-interference'" in html
     assert 'if(boundaries.length===1)renderInterval(selectedTime)' in html
+
+
+def test_moon_distance_readout_payload():
+    frame=pd.DataFrame({'Time':pd.to_datetime(['2026-10-30T18:00Z','2026-10-31T06:00Z']),'Altitude (°)':[40,50],'Azimuth (°)':[100,150]})
+    distance=dict(times=[frame.Time[0].timestamp()*1000,frame.Time[1].timestamp()*1000],separation=[30,40],altitudes=[-5,20],illumination=[75,76])
+    html=chart_html(frame,40,'Europe/London',moon_distance=distance)
+    data=json.loads(html.split('const data=')[1].split(';')[0])
+    assert data['moon_distance']==distance
+    assert 'id="moon-distance"' in html
+    assert 'id="moon-illumination"' in html
+    assert data['moon_distance']['illumination']==[75,76]
+    assert 'Moon trajectory' not in html
+
+
+def test_twilight_payload_and_only_real_dawn_dusk_boundaries():
+    from astronomical_night import NightInterval
+    from datetime import datetime,timezone,timedelta
+    start=datetime(2026,11,4,17,tzinfo=timezone.utc)
+    frame=pd.DataFrame({'Time':[start,start+timedelta(hours=12)],'Altitude (°)':[40,50],'Azimuth (°)':[90,100]})
+    night=NightInterval(start,start+timedelta(hours=10),False,True)
+    twilight=NightInterval(night.end,start+timedelta(hours=11))
+    html=chart_html(frame,40,'Europe/London',night_periods=(night,),twilight_periods=(twilight,))
+    payload=json.loads(html.split('const data=')[1].split(';')[0])
+    assert 'night_boundaries' not in payload
+    assert 'data-night-boundary' not in html
+    assert 'Astronomical night:' in html
+    assert payload['astronomical_twilight']==[[int(twilight.start.timestamp()*1000),int(twilight.end.timestamp()*1000)]]
+    assert html.index("'data-astronomical-twilight'")<html.index("'data-horizon-shading'")
+
+
+def test_combined_moon_card_and_night_tooltip():
+    frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-04T18:00Z','2026-11-05T06:00Z']),'Altitude (°)':[40,50],'Azimuth (°)':[90,100]})
+    html=chart_html(frame,40,'Europe/London')
+    assert html.count('class="card moon-card"')==1
+    assert 'id="moon-phase"' in html and 'id="moon-rating"' in html
+    assert 'Angle: <span id="moon-distance"' in html
+    assert 'Illumination: <span id="moon-illumination"' in html
+    assert 'Astronomical night:' in html and 'Astronomical twilight:' in html
+    assert 'data-night-boundary' not in html
+
+
+def test_moon_card_has_three_ordered_sections():
+    frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-04T18:00Z','2026-11-05T06:00Z']),'Altitude (°)':[40,50],'Azimuth (°)':[90,100]})
+    html=chart_html(frame,40,'Europe/London')
+    assert html.index('id="moon-phase"')<html.index('id="moon-distance"')<html.index('id="moon-illumination"')<html.index('id="moon-phase-name"')<html.index('id="moon-rating"')
+    assert "document.getElementById('moon-phase-name').textContent=phase.name" in html

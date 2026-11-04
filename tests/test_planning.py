@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import json
 import pytest
-from planning import DEFAULTS, Plan, assess, load_rules, save_accepted, evaluate
+from planning import DEFAULTS, Plan, assess, load_rules, evaluate
 from configuration import Settings
 from targets import Target
 
@@ -25,11 +25,7 @@ def test_good_plan_and_overheads(tmp_path):
     assert r.integration_minutes==r.exposures*3
     assert not r.can_accept(DEFAULTS)
     assert r.can_accept(DEFAULTS,True)
-    path=save_accepted(plan(),r,DEFAULTS,tmp_path,True)
-    payload=json.loads(path.read_text())
-    assert payload['execution_status']=='not_armed'
-    assert payload['plan']['end'].startswith('2026-10-30')
-    assert payload['rules']==DEFAULTS
+
 
 
 @pytest.mark.parametrize('changes,name,status',[
@@ -59,9 +55,6 @@ def test_overrides_and_disabled_checks():
     assert report(rules).status=='Suitable'
     rules['darkness']['enabled']=False
     assert all(c.name!='Astronomical darkness' for c in report(rules,sun_altitudes=[20,20]).checks)
-    rules['enabled']=False
-    with pytest.raises(ValueError):
-        save_accepted(plan(),report(rules),rules,'unused',True)
 
 
 @pytest.mark.parametrize('changes',[
@@ -138,17 +131,6 @@ def test_visibility_duration_interpolates_crossings_and_uses_longest_run():
     assert visibility_durations(60,[1,1],[1,1])==(0,60)
 
 
-def test_short_visible_window_message_and_simple_issue_list():
-    from planning_ui import simple_report_messages
-    r=report(altitudes=[40,60],horizons=[50,50],sun_altitudes=[-15,-14])
-    issues=simple_report_messages(r)
-    assert not any('sampled' in text or 'clearance' in text for _,text in issues)
-    assert not any(text=='Observation includes time outside astronomical darkness' for _,text in issues)
-    assert not any(text=='Object is obscured during the observation' for _,text in issues)
-    r=report(altitudes=[40,60],horizons=[55,55])
-    assert any(c.message=='Visible window is only 0.6 hours' for c in r.checks)
-    from planning import Report, Check
-    assert simple_report_messages(Report([Check('Good','Suitable','Everything fine')],10,30))==[]
 
 
 
@@ -158,7 +140,7 @@ def test_fixed_checklist_order_and_timing(hour,message):
     start=datetime(2026,10,29,hour,tzinfo=timezone.utc)
     p=plan(start=start,end=start+timedelta(hours=3))
     r=checklist_report(p,DEFAULTS,40,[40,50],[10,10],[-18,-20],30)
-    assert [c.name for c in r.checks]==['Start altitude','Start horizon','Start night','End altitude','End horizon','End night','Observation duration','Exposure count','Start timing','Obscured duration','Limited observation duration']
+    assert [c.name for c in r.checks]==['Start altitude','Start horizon','Start night','End altitude','End horizon','End night','Observation duration','Exposure count','Start timing','Limited observation duration']
     assert next(c.message for c in r.checks if c.name=='Start timing')==message
     assert all(c.status=='Suitable' for c in r.checks if c.name!='Start timing')
 
@@ -167,8 +149,8 @@ def test_checklist_endpoint_failures_and_short_window():
     from planning import checklist_report
     p=plan(end=datetime(2026,10,29,20,30,tzinfo=timezone.utc))
     r=checklist_report(p,DEFAULTS,40,[39,30],[40,30],[-17,-18],4)
-    assert [c.status for c in r.checks[:6]]==['Unsuitable','Unsuitable','Unsuitable','Unsuitable','Unsuitable','Suitable']
-    assert 'may be too short' in r.checks[6].message
+    assert [c.status for c in r.checks[:6]]==['Unsuitable','Unsuitable','Challenging','Unsuitable','Unsuitable','Suitable']
+    assert r.checks[6].message=='Total observation time may be too short (00:30)'
     assert r.checks[7].message=='Number of exposures is small (4)'
     assert not r.can_accept(DEFAULTS,True)
 
@@ -182,20 +164,6 @@ def test_timing_configuration_validation(tmp_path):
 
 
 
-@pytest.mark.parametrize('alt,horizon,times,expected,status',[
-    ([50,50],[0,0],[0,3600],'00:00 (0 %)','Suitable'),
-    ([10,10],[20,20],[0,3600],'01:00 (100 %)','Unsuitable'),
-    ([10,30],[20,20],[0,3600],'00:30 (50 %)','Unsuitable'),
-    ([30,30,10],[20,20,20],[0,3000,3600],'00:05 (8 %)','Unsuitable'),
-])
-def test_feedback_obscured_duration(alt,horizon,times,expected,status):
-    from planning import checklist_report
-    p=plan(end=datetime(2026,10,29,21,tzinfo=timezone.utc))
-    report=checklist_report(p,DEFAULTS,40,alt,horizon,[-20]*len(alt),20,sample_seconds=times)
-    check=next(c for c in report.checks if c.name=='Obscured duration')
-    assert check.name=='Obscured duration'
-    assert check.status==status
-    assert check.message==f'The object is obscured for {expected} of the total observation time'
 
 
 
@@ -217,7 +185,7 @@ def test_combined_altitude_and_horizon_duration(alt,horizon,minimum,expected):
     check=report.checks[-1]
     assert check.name=='Limited observation duration'
     minutes=round(expected/60)
-    assert check.message==f'The object is either below the minimum specified altitude or obscured by the local horizon for {minutes//60:02d}:{minutes%60:02d} ({expected/36:.0f} %) of the total observation time'
+    assert check.message==f'The object is below the minimum altitude and/or obscured by the local horizon for {minutes//60:02d}:{minutes%60:02d} ({expected/36:.0f}%) of the observation window'
     assert check.status==('Suitable' if expected==0 else 'Unsuitable')
 
 
@@ -230,3 +198,34 @@ def test_checklist_exposure_count_matches_chart_without_overheads():
     r=evaluate_checklist(p,Target('M31','M31',10.6847,41.269),settings,deepcopy(DEFAULTS))
     assert r.exposures==37
     assert next(c.message for c in r.checks if c.name=='Exposure count')=='Number of exposures is sufficient (37)'
+
+
+@pytest.mark.parametrize('seconds,expected',[(2880,'00:48'),(3599,'01:00'),(9000,'02:30')])
+def test_checklist_duration_uses_hours_and_minutes(seconds,expected):
+    from planning import checklist_report
+    start=datetime(2026,10,29,20,tzinfo=timezone.utc)
+    p=plan(start=start,end=start+timedelta(seconds=seconds))
+    report=checklist_report(p,DEFAULTS,40,[50,50],[0,0],[-20,-20],10)
+    check=next(c for c in report.checks if c.name=='Observation duration')
+    assert check.message.endswith('('+expected+')')
+    assert 'hours' not in check.message
+    assert sum(c.name=='Limited observation duration' for c in report.checks)==1
+    assert not any(c.name=='Obscured duration' for c in report.checks)
+
+
+@pytest.mark.parametrize('solar,status,phrase',[(-20,'Suitable','Astronomical night'),(-18,'Suitable','Astronomical night'),(-15,'Challenging','Astronomical twilight'),(-12,'Challenging','Astronomical twilight'),(-10,'Challenging','brighter than astronomical twilight')])
+def test_report_sky_phase_is_advisory(solar,status,phrase):
+    from planning import checklist_report
+    p=plan(end=datetime(2026,10,29,21,tzinfo=timezone.utc))
+    r=checklist_report(p,DEFAULTS,40,[50,50],[0,0],[-20,solar],20)
+    check=next(c for c in r.checks if c.name=='End night')
+    assert check.status==status and phrase in check.message
+
+
+def test_window_sky_totals_include_twilight_and_midwindow_brightness():
+    from planning import checklist_report
+    p=plan(end=datetime(2026,10,29,22,tzinfo=timezone.utc))
+    r=checklist_report(p,DEFAULTS,40,[50,50,50],[0,0,0],[-20,-10,-20],20,sample_seconds=[0,3600,7200])
+    assert r.sky_feedback['night']==pytest.approx(1440)
+    assert r.sky_feedback['twilight']==pytest.approx(4320)
+    assert r.sky_feedback['brighter']==pytest.approx(1440)

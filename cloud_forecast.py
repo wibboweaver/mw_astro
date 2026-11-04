@@ -1,4 +1,4 @@
-"""Hourly total cloud cover from Open-Meteo; all internal times are UTC."""
+"""Hourly cloud cover and precipitation probability from Open-Meteo; all internal times are UTC."""
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import json
@@ -25,22 +25,29 @@ def load_cloud_settings(path):
 def fetch_cloud_forecast(latitude,longitude):
     if not math.isfinite(latitude) or not math.isfinite(longitude) or not -90<=latitude<=90 or not -180<=longitude<=180:
         raise ValueError('Invalid forecast coordinates.')
-    url=ENDPOINT+'?'+urlencode(dict(latitude=latitude,longitude=longitude,hourly='cloud_cover',forecast_days=16,timeformat='unixtime',timezone='UTC'))
+    url=ENDPOINT+'?'+urlencode(dict(latitude=latitude,longitude=longitude,hourly='cloud_cover,precipitation_probability',forecast_days=16,timeformat='unixtime',timezone='UTC'))
     with urlopen(url,timeout=8) as response:body=response.read(1024*1024+1)
     if len(body)>1024*1024:raise ValueError('Forecast response is too large.')
     data=json.loads(body)
     hourly=data['hourly'];times=hourly['time'];values=hourly['cloud_cover']
     if data.get('hourly_units',{}).get('cloud_cover')!='%' or len(times)!=len(values) or not times:
         raise ValueError('Invalid cloud forecast response.')
-    segments=[];previous=None
-    for stamp,value in zip(times,values):
+    rain=hourly.get('precipitation_probability',[None]*len(times))
+    if len(rain)!=len(times) or ('precipitation_probability' in hourly and data.get('hourly_units',{}).get('precipitation_probability')!='%'):
+        raise ValueError('Invalid precipitation forecast response.')
+    segments=[];precipitation_segments=[];previous=None
+    for stamp,value,probability in zip(times,values,rain):
         if isinstance(stamp,bool) or not isinstance(stamp,(int,float)) or not math.isfinite(stamp) or previous is not None and stamp<=previous:
             raise ValueError('Invalid forecast timestamp.')
         previous=stamp
         if value is not None and (isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or not 0<=value<=100):
             raise ValueError('Invalid cloud cover percentage.')
+        if probability is not None and (isinstance(probability,bool) or not isinstance(probability,(int,float)) or not math.isfinite(probability) or not 0<=probability<=100):
+            raise ValueError('Invalid precipitation probability.')
         segments.append(dict(start=stamp*1000,end=(stamp+3600)*1000,percent=value))
-    return dict(segments=segments,retrieved_at=datetime.now(timezone.utc).isoformat(),error=None)
+        # Open-Meteo precipitation probability describes the preceding hour.
+        precipitation_segments.append(dict(start=(stamp-3600)*1000,end=stamp*1000,percent=probability))
+    return dict(segments=segments,precipitation_segments=precipitation_segments,retrieved_at=datetime.now(timezone.utc).isoformat(),error=None)
 
 
 def forecast_for_chart(first,last,latitude,longitude,settings,fetcher=fetch_cloud_forecast,now=None):
@@ -81,3 +88,13 @@ def summarise_cloud_window(data,start,end):
                 exceeded_percent=exceeded/total*100,exceeded_duration=duration(exceeded),
                 missing_duration=duration(missing),missing_seconds=missing,
                 covered_seconds=covered,retrieved_at=data.get('retrieved_at'),error=data.get('error'))
+
+
+def chart_weather_summary(data,start,end):
+    """One shared weather summary for every target over the full chart range."""
+    cloud=summarise_cloud_window(data,start,end)
+    rain=summarise_cloud_window(dict(data,segments=data.get('precipitation_segments',[])),start,end)
+    return dict(cloud=cloud['average'] if cloud['missing_seconds']<.5 else None,
+                rain=rain['highest'] if rain['missing_seconds']<.5 else None)
+
+_loaded_source_stamp=Path(__file__).stat().st_mtime_ns

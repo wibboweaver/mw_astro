@@ -26,5 +26,24 @@
       return Array.isArray(values) && values.length <= 2 && values.every(v => Number.isFinite(v) && v >= first && v <= last) ? values : [];
     } catch (_) { return []; }
   }
-  return {select, summary, duration, restore};
+  function interpolate(times, values, timestamp) {
+    if (!times || !values || times.length !== values.length || !times.length) return null;
+    const t=Math.max(times[0],Math.min(times[times.length-1],timestamp));
+    let i=0;while(i<times.length-2&&times[i+1]<t)i++;
+    if (times.length===1) return Number.isFinite(values[0])?values[0]:null;
+    const a=values[i],b=values[i+1];
+    if (!Number.isFinite(a)||!Number.isFinite(b)) return null;
+    return a+(b-a)*(t-times[i])/(times[i+1]-times[i]);
+  }
+  function moonPhase(angle){
+    if(!Number.isFinite(angle))return {icon:'○',name:'Moon phase unavailable'};
+    const index=Math.floor((((angle%360)+360)%360+22.5)/45)%8;
+    return {icon:['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'][index],name:['New Moon','Waxing crescent','First quarter','Waxing gibbous','Full Moon','Waning gibbous','Last quarter','Waning crescent'][index]};
+  }
+  function moonRating(separation,altitude,illumination,intervals,timestamp,enabled){
+    if(!enabled||![separation,altitude,illumination].every(Number.isFinite))return 'Unknown';
+    const interval=(intervals||[]).find(p=>timestamp>=p.start&&timestamp<p.end);
+    return interval?.level==='strong'?'High impact':interval?'Moderate impact':'Low impact';
+  }
+  return {select, summary, duration, restore, interpolate, moonPhase, moonRating};
 });

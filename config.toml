@@ -1,25 +1,27 @@
-# Sidebar changes are saved automatically. Elevation is configured here only.
+
 [observatory]
-latitude_deg = 52.293232
-longitude_deg = -3.036226
-height_m = 40.0
-timezone = "Europe/London"
-
+latitude_deg = 52.293232           # Latitude of the observer
+longitude_deg = -3.036226          # Longitude of the observer
+height_m = 40.0                    # Height of the observer above sea level.
+timezone = "Europe/London"         # The observer's timezone.
 horizon_file = "Decking.txt"
-[chart]
-start_hour = 18
-duration_hours = 12
-step_minutes = 10
-minimum_altitude_deg = 40.0
-evening_date = "2026-10-30"
-start_minute = 11
-visibility_mode = "During window"
 
-exposure_seconds = 300.0
+[chart]
+start_hour = 17                    # The hour at which the chart begins.
+start_minute = 0                   # The minute at which the chart begins.
+duration_hours = 16.0              # The full duration of the chart window.
+step_minutes = 10                  # The increments for the start time slider.
+minimum_altitude_deg = 50          # The minimum specified object altitude.
+evening_date = "2026-11-04"
+visibility_mode = "During window"  # How objects are selected for the target list.
+exposure_seconds = 300.0           # The length of each image exposure in seconds.
+
 [targets]
+min_frame_coverage_percent = 10.0
+max_objects = 200                              # The maximum length of the target list.
 target_source = "Automatic catalogue"
 catalogue_scope = "Named and Messier objects"
-catalogue_file = "targets.csv"
+catalogue_file = "targets.csv"                 # A custom target list.
 
 [preview]
 show_preview = true
@@ -44,15 +46,23 @@ preferred_sun_altitude = -18.0
 [planning_rules.visibility]
 sample_interval_minutes = 2
 
-# Broadband estimate: Moon above the astronomical horizon, at least 30% lit,
-# and within 60 degrees of the target OR at least 70% lit at any separation.
-# Stronger shading when at least 70% lit and within 30 degrees.
+# Moon interference rules, shared by the chart indicator and panel.
 [planning_rules.moon]
 enabled = true
-broadband_min_separation = 60.0
-broadband_critical_separation = 30.0
-high_illumination_percent = 70.0
+# Moon must be ABOVE this altitude. 0 degrees = astronomical horizon.
+# This is independent of the target minimum altitude and local obstructions.
+minimum_moon_altitude_deg = 0.0
+# No interference flagged below this illuminated percentage.
 low_illumination_percent = 30.0
+# At or above the low threshold, flag targets within this angular separation.
+broadband_min_separation = 60.0
+# Bright-Moon threshold, in illuminated percent.
+high_illumination_percent = 70.0
+# If true, a bright Moon flags interference even beyond broadband_min_separation.
+bright_moon_any_separation = true
+# Strong interference classification when the Moon is bright and this close.
+# The chart currently uses one yellow indicator for both classifications.
+broadband_critical_separation = 30.0
 
 [planning_rules.integration]
 preferred_minutes = 90.0
@@ -68,3 +78,18 @@ enabled = true
 clear_max_percent = 20
 light_max_percent = 50
 medium_max_percent = 80
+
+# Weather-independent preference weights, normalised to 100; not a probability of imaging success.
+[night_rating]
+visibility_weight = 30
+moon_weight = 15
+frame_weight = 25
+preferred_window_minutes = 120
+
+# Frame credit rises from zero to full at this uncropped sensor coverage.
+preferred_frame_coverage_percent = 50.0
+# 1 = linear; above 1 penalises small targets more, below 1 less.
+frame_curve_exponent = 1.0
+# Cap the total score below [targets].min_frame_coverage_percent.
+# Set to 100 to disable the cap.
+undersized_score_cap = 60.0

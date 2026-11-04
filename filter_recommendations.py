@@ -1,4 +1,4 @@
-"""Conservative DB2 recommendations from published OpenNGC object types."""
+"""Conservative Dualband Filter recommendations from published OpenNGC object types."""
 import csv
 from functools import lru_cache
 from catalogue import DATA_DIR
@@ -26,10 +26,10 @@ def catalogue_types():
     return types
 
 
-def recommend_db2(identifier):
+def recommend_dualband(identifier):
     kind = catalogue_types().get(normalise_id(identifier))
     if kind in EMISSION_TYPES:
-        return True, f'OpenNGC type {kind}: emission-line target; the ZWO DB2 2-inch Dual-Band Filter is recommended for Ha/OIII imaging.'
+        return True, f'OpenNGC type {kind}: emission-line target; the Dualband Filter is recommended for Ha/OIII imaging.'
     if kind in BROADBAND_TYPES:
-        return False, f'OpenNGC type {kind}: broadband target; the DB2 dual-band filter is not recommended for its main broadband structure.'
-    return False, 'Object type is unknown or ambiguous: no automatic DB2 recommendation. An unticked box does not establish that a filter is unsuitable.'
+        return False, f'OpenNGC type {kind}: broadband target; the Dualband Filter is not recommended for its main broadband structure.'
+    return False, 'Object type is unknown or ambiguous: no automatic Dualband Filter recommendation. No automatic recommendation does not establish that a filter is unsuitable.'

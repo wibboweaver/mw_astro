@@ -11,7 +11,7 @@ export default function(component) {
   const limit = value => Math.max(-300, Math.min(300, value));
   pan = {x: limit(pan.x), y: limit(pan.y)};
   const save = () => {try {sessionStorage.setItem(storageKey, JSON.stringify(pan));} catch (_) {}};
-  survey.setAttribute('href', data.image);
+  if (survey.getAttribute('href') !== data.image) survey.setAttribute('href', data.image);
   frame.setAttribute('x', 300 - data.width / 2);
   frame.setAttribute('y', 300 - data.height / 2);
   frame.setAttribute('width', data.width);

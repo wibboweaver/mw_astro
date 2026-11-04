@@ -125,78 +125,33 @@ def test_automatic_catalogue_needs_no_list_and_selection_is_cached():
         assert not app.file_uploader
 
 
-def test_reference_image_is_cached_and_failure_does_not_hide_chart():
-    from reference_images import fetch_preview, PreviewError
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('reference_images.fetch_preview', wraps=fetch_preview) as fetch:
+def esa_payload(app):
+    import json
+    return next(json.loads(item.proto.json) for item in app.get('bidi_component')
+                if 'esa_dss2_preview' in item.proto.component_name)
+
+
+def test_esa_preview_uses_tiles_without_requesting_cutouts():
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('reference_images.fetch_preview') as fetch:
         app = AppTest.from_file(APP, default_timeout=20).run()
         assert not app.exception
-        assert any('STScI/NASA' in item.value for item in app.main.markdown)
-        assert fetch.call_count == 1
+        original = esa_payload(app)
+        assert original['survey'] == 'https://skies.esac.esa.int/DSSColor'
+        assert 'image' not in original
         app.sidebar.slider(key='sidebar_start_time').set_value(time(20,30)).run()
-        assert fetch.call_count == 1
+        assert esa_payload(app)['view_key'] == original['view_key']
         select_target(app, 'Fixture low')
-        assert fetch.call_count == 2
+        assert esa_payload(app)['view_key'] != original['view_key']
         select_target(app, 'Fixture high')
-        assert fetch.call_count == 2
-        st.cache_data.clear()
-        fetch.side_effect = PreviewError('DSS2 preview is unavailable. Please try again later.')
-        app.run()
-        assert not app.exception
+        assert esa_payload(app)['view_key'] == original['view_key']
+        fetch.assert_not_called()
         assert len(chart_frames(app)) == 1
-        assert 'unavailable' in app.warning[0].value
 
 
-def test_manual_lookup_without_catalogue_keeps_chart_preview_and_resolved_target():
-    with patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('objects.resolve_object', return_value={'name': 'TEST-ID', 'ra_deg': 10, 'dec_deg': 40}) as resolver, patch('visibility.calculate_tracks', side_effect=fake_tracks) as calculate:
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        app.radio[0].set_value('Object name / ID').run()
-        app.text_input[0].set_value('  Manual fixture  ')
-        next(b for b in app.button if b.label == 'Look up').click().run()
-        assert not app.exception
-        assert app.subheader[0].value == 'Manual fixture'
-        assert len(chart_frames(app)) == 1
-        assert any('STScI/NASA' in item.value for item in app.main.markdown)
-        app.sidebar.slider(key='sidebar_start_time').set_value(time(20,30)).run()
-        resolver.assert_called_once_with('Manual fixture')
-        assert calculate.call_args.args[4].hour == 20
-        assert app.subheader[0].value == 'Manual fixture'
-        # Outside the visibility limit still shows an explicitly requested object.
-        app.sidebar.slider(key='sidebar_minimum').set_value(80.0).run()
-        assert len(chart_frames(app)) == 1
-        assert any('does not meet' in w.value for w in app.sidebar.warning)
 
 
-@pytest.mark.parametrize('name, failure, message', [
-    ('', None, 'Enter an object name'),
-    ('missing', ValueError('Object not found: missing'), 'Object not found'),
-    ('offline', RuntimeError('offline'), 'SIMBAD lookup failed'),
-])
-def test_manual_lookup_errors_do_not_show_stale_chart(name, failure, message):
-    with patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('objects.resolve_object', side_effect=failure) as resolver:
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        app.radio[0].set_value('Object name / ID').run()
-        app.text_input[0].set_value(name)
-        next(b for b in app.button if b.label == 'Look up').click().run()
-        assert not app.exception
-        assert not chart_frames(app)
-        assert any(message in el.value for el in [*app.warning, *app.error])
-        if not name:
-            resolver.assert_not_called()
 
 
-def test_switch_between_table_and_manual_preserves_choices():
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('objects.resolve_object', return_value={'name':'MANUAL','ra_deg':30,'dec_deg':40}) as resolver:
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        assert target_names(app) == sorted(target_names(app), key=str.casefold)
-        select_target(app, 'Fixture low')
-        app.radio[0].set_value('Object name / ID').run()
-        app.text_input[0].set_value('Manual fixture')
-        next(b for b in app.button if b.label == 'Look up').click().run()
-        app.radio[0].set_value('Visible targets').run()
-        assert app.session_state['selected_target'] == 'Fixture low'
-        app.radio[0].set_value('Object name / ID').run()
-        assert app.subheader[0].value == 'Manual fixture'
-        resolver.assert_called_once()
 
 
 def test_sidebar_changes_persist_across_new_sessions(tmp_path, monkeypatch):
@@ -213,8 +168,8 @@ def test_sidebar_changes_persist_across_new_sessions(tmp_path, monkeypatch):
         app.sidebar.number_input(key='sidebar_longitude').set_value(-2.0).run()
         app.sidebar.selectbox(key='sidebar_horizon').select('Garden.txt').run()
         app.sidebar.date_input(key='sidebar_date').set_value(__import__('datetime').date(2026,11,2)).run()
-        app.sidebar.slider(key='sidebar_start_time').set_value(time(21,35)).run()
-        app.sidebar.select_slider(key='sidebar_exposure').set_value(240.0).run()
+        app.sidebar.slider(key='sidebar_start_time').set_value(time(21,40)).run()
+        app.sidebar.slider(key='sidebar_exposure').set_value(240.0).run()
         app.sidebar.slider(key='sidebar_minimum').set_value(45.0).run()
         app.sidebar.selectbox(key='sidebar_visibility').select('At start').run()
         app.sidebar.selectbox(key='sidebar_scope').select('All deep-sky objects').run()
@@ -224,14 +179,14 @@ def test_sidebar_changes_persist_across_new_sessions(tmp_path, monkeypatch):
         assert saved.height_m == 123
         assert saved.exposure_seconds == 240
         assert saved.latitude_deg == 53 and saved.longitude_deg == -2
-        assert saved.horizon_file == 'Garden.txt' and saved.start_minute == 35
+        assert saved.horizon_file == 'Garden.txt' and saved.start_minute == 40
         assert saved.evening_date == '2026-11-02' and saved.minimum_altitude_deg == 45
         assert not saved.show_preview and saved.image_field == '2°'
         fresh = AppTest.from_file(APP, default_timeout=20).run()
         assert not fresh.exception
         assert fresh.sidebar.number_input(key='sidebar_latitude').value == 53
-        assert fresh.sidebar.slider(key='sidebar_start_time').value == time(21,35)
-        assert fresh.sidebar.select_slider(key='sidebar_exposure').value == 240
+        assert fresh.sidebar.slider(key='sidebar_start_time').value == time(21,40)
+        assert fresh.sidebar.slider(key='sidebar_exposure').value == 240
         assert fresh.sidebar.date_input(key='sidebar_date').value.isoformat() == '2026-11-02'
         assert fresh.sidebar.selectbox(key='sidebar_horizon').value == 'Garden.txt'
         assert not fresh.sidebar.checkbox(key='sidebar_preview').value
@@ -252,30 +207,32 @@ def test_save_failure_is_visible_and_chart_still_works():
 
 
 def test_exposure_control_and_filter_recommendation():
-    from filter_recommendations import recommend_db2
-    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,evening_date='2026-10-22')), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('filter_recommendations.recommend_db2',return_value=(True,'Emission nebula')):
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,evening_date='2026-10-22')), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('filter_recommendations.recommend_dualband',return_value=(True,'Emission nebula')):
         app=AppTest.from_file(APP,default_timeout=20).run()
         assert not app.exception
-        assert app.sidebar.select_slider(key='sidebar_exposure').value == 180
-        recommendation=next(box for box in app.checkbox if 'filter recommended' in box.label)
-        assert recommendation.value and recommendation.disabled
-        app.sidebar.select_slider(key='sidebar_exposure').set_value(240.0).run()
+        assert app.sidebar.slider(key='sidebar_exposure').value == 180
+        assert not any('filter recommended' in box.label for box in app.checkbox)
+        assert set(app.dataframe[0].value['Filter?'])=={'yes'}
+        app.sidebar.slider(key='sidebar_exposure').set_value(240.0).run()
         assert not app.exception
         assert '"exposure_seconds": 240.0' in chart_frames(app)[0].proto.srcdoc
-        with patch('filter_recommendations.recommend_db2',return_value=(False,'Broadband target')):
+        with patch('filter_recommendations.recommend_dualband',return_value=(False,'Broadband target')):
             select_target(app, 'Fixture low')
-            assert not next(box for box in app.checkbox if 'filter recommended' in box.label).value
+            st.cache_data.clear()
+            app.run()
+            assert set(app.dataframe[0].value['Filter?'])=={'no'}
 
 
-def test_night_times_appear_under_reference_links_and_survive_image_failure():
+def test_night_times_remain_without_reference_links_and_survive_image_failure():
     from reference_images import PreviewError
     with patch('catalogue.load_catalogue',return_value=FIXTURES),patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,evening_date='2026-10-22')),patch('visibility.calculate_tracks',side_effect=fake_tracks):
         app=AppTest.from_file(APP,default_timeout=20).run()
         assert not app.exception
         markdown=[item.value for item in app.main.markdown]
-        links=next(i for i,text in enumerate(markdown) if 'HiPS2FITS' in text)
+        assert not any('ESA sky survey' in text for text in markdown)
+        assert not app.sidebar.caption
+        assert any(c.value=='Chart shows object altitude over time' for c in app.main.caption)
         times=next(i for i,text in enumerate(markdown) if 'Astronomical night (Europe/London)' in text)
-        assert times > links
         assert 'Start:' in markdown[times] and 'End:' in markdown[times]
         assert '"astronomical_night": [[' in chart_frames(app)[0].proto.srcdoc
         st.cache_data.clear()
@@ -294,7 +251,7 @@ def test_visible_target_table_selects_and_filters():
         assert not any(box.label == 'Target (common name)' for box in app.selectbox)
         assert app.dataframe[0].proto.selection_mode
         assert app.main.subheader[0].value == 'Visible targets'
-        assert list(table.columns) == ['Catalogue ID', 'Common name', 'Transit time', 'Size', 'Classification', 'Distance', 'RA (J2000)', 'Dec (J2000)']
+        assert list(table.columns) == ['Catalogue ID', 'Common name', 'Night rating', 'Rating notes', 'Transit time', 'Frame coverage', 'Object pixels', 'Window', 'Filter?', 'Size', 'Classification', 'Distance', 'RA (J2000)', 'Dec (J2000)']
         select_target(app, 'Fixture low')
         pd.testing.assert_frame_equal(table, app.dataframe[0].value)
         app.sidebar.slider(key='sidebar_minimum').set_value(60.0).run()
@@ -346,30 +303,27 @@ def test_clearing_row_hides_chart_and_reselecting_updates_details():
         assert '10:40' in chart_frames(app)[0].proto.srcdoc
 
 
-def test_inline_checklist_is_fixed_and_has_no_dialog():
-    from datetime import datetime, timezone
-    from planning import Plan, checklist_report, DEFAULTS
-    p=Plan('Fixture',datetime(2026,10,29,20,tzinfo=timezone.utc),datetime(2026,10,30,1,tzinfo=timezone.utc),180)
-    report=checklist_report(p,DEFAULTS,40,[50,20],[0,30],[-20,-10],40)
-    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('planning_ui.evaluate_checklist',return_value=report), patch('interactive_chart.selected_interval',return_value=(p.start,p.end)):
+def test_markdown_report_panel_generates_and_invalidates():
+    from planning import Report,Check
+    from datetime import datetime,timezone
+    begin=datetime(2026,10,29,20,tzinfo=timezone.utc)
+    end=datetime(2026,10,30,1,tzinfo=timezone.utc)
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('planning_ui.evaluate_checklist',return_value=Report([Check('Start night','Unsuitable','Outside astronomical darkness')],40,120)), patch('interactive_chart.selected_interval',return_value=(begin,end)):
         app=AppTest.from_file(APP,default_timeout=20).run()
         assert not app.exception
-        assert not app.get('dialog')
-        assert not any(b.label=='Review imaging plan' for b in app.button)
-        assert next(b for b in app.button if b.label=='Accept plan').disabled
-        lines=[m.value for m in app.markdown if m.value.startswith(('✅','❌')) and 'forecast cloud cover' not in m.value and 'Cloud cover exceeds' not in m.value]
-        assert len(lines)==11
-        assert lines[0].startswith('✅ Object is above the minimum altitude')
-        assert lines[3].startswith('❌ Object is below the minimum altitude')
-        assert lines[5]=='❌ Astronomical night is not occurring'
-        assert lines[-2].startswith('❌ The object is obscured for ')
-        assert lines[-1].startswith('❌ The object is either below the minimum specified altitude or obscured by the local horizon for ')
-        assert any(e.label=='Observation Feedback' for e in app.expander)
-        headings=[m.value for m in app.markdown if m.value.startswith('<h3')]
-        assert len(headings)==5
-        assert all('color:#4c9be8' in h and 'font-size:clamp(16px,3.5vw,25px)' in h for h in headings)
+        assert not any(e.label=='Observation Feedback' for e in app.expander)
+        assert any(e.label=='Imaging report' for e in app.expander)
+        assert not any(b.label=='Accept plan' for b in app.button)
+        next(b for b in app.button if b.label=='Generate report').click().run()
+        assert not app.exception
+        content=app.session_state['imaging_report_markdown']
+        assert '**GO' not in content and '**NO GO' not in content
+        assert content.count('## Observation Criteria')==1
+        assert 'Sequence:' not in content
         app.run()
-        assert [m.value for m in app.markdown if m.value.startswith(('✅','❌')) and 'forecast cloud cover' not in m.value and 'Cloud cover exceeds' not in m.value]==lines
+        assert app.session_state['imaging_report_markdown']==content
+        app.sidebar.slider(key='sidebar_exposure').set_value(240).run()
+        assert 'imaging_report_markdown' not in app.session_state
 
 
 @pytest.mark.parametrize('points,message', [([], 'Missing start and stop'), ([0], 'Missing stop')])
@@ -382,7 +336,7 @@ def test_planner_reports_missing_chart_times(points,message):
         chart.side_effect=selection
         app=AppTest.from_file(APP,default_timeout=20).run()
         assert not app.exception
-        assert any(message in e.value for e in app.error)
+        assert any(message in e.value for e in app.info)
         evaluate.assert_not_called()
 
 
@@ -396,10 +350,149 @@ def test_planner_uses_chart_interval_and_current_sidebar_exposure():
         return {'interval':list(reversed(payload['times']))}
     with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('interactive_chart.render_chart',side_effect=selection), patch('planning_ui.evaluate_checklist',return_value=Report([Check('Weather','Unknown','Check forecast')],20,80)) as evaluate:
         app=AppTest.from_file(APP,default_timeout=20).run()
-        app.sidebar.select_slider(key='sidebar_exposure').set_value(240.0).run()
+        app.sidebar.slider(key='sidebar_exposure').set_value(240.0).run()
+        assert not app.exception
+        next(b for b in app.button if b.label=='Generate report').click().run()
         assert not app.exception
         plan=evaluate.call_args.args[0]
         assert plan.exposure_seconds==240
         assert [int(plan.start.timestamp()*1000),int(plan.end.timestamp()*1000)]==captured['times']
         assert not app.time_input
         assert not any(n.label=='Session exposure (seconds)' for n in app.number_input)
+
+
+def test_target_image_is_pinned_across_equipment_and_chart_changes():
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        original=esa_payload(app)
+        app.sidebar.number_input(key='sidebar_focal_length').set_value(1100.).run()
+        app.sidebar.selectbox(key='sidebar_image_field').select('5°').run()
+        app.sidebar.slider(key='sidebar_start_time').set_value(time(20,30)).run()
+        st.cache_data.clear()
+        app.run()
+        current=esa_payload(app)
+        assert not app.exception
+        assert current['image_field']==original['image_field']
+        assert current['view_key']==original['view_key']
+        assert current['width']!=original['width']
+        select_target(app,'Fixture low')
+        assert esa_payload(app)['view_key']!=original['view_key']
+
+
+def test_frame_fit_updates_with_equipment_and_window_aligns_left():
+    import json
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('object_sizes.catalogue_sizes',return_value={'TEST1':(60.,30.),'TEST2':(120.,60.)}):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        before=app.dataframe[0].value['Frame coverage'].tolist()
+        assert all(value != '—' for value in before)
+        columns=json.loads(app.dataframe[0].proto.columns)
+        assert columns['Window']['alignment']=='left'
+        app.sidebar.number_input(key='sidebar_focal_length').set_value(1100.).run()
+        assert not app.exception
+        assert app.dataframe[0].value['Frame coverage'].tolist()!=before
+        assert app.session_state['selected_target']=='Fixture high'
+
+
+@pytest.mark.parametrize('hours',[4.0,24.0])
+def test_chart_duration_slider_updates_tracks_and_persists(hours):
+    import configuration
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('visibility.calculate_tracks',side_effect=fake_tracks) as calculate:
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        sliders=list(app.sidebar.slider)
+        labels=[slider.label for slider in sliders]
+        assert labels.index(app.sidebar.slider(key='sidebar_duration').label)==labels.index('Minimum altitude (°)')+1
+        assert app.sidebar.slider(key='sidebar_exposure').proto.step==10
+        assert app.sidebar.slider(key='sidebar_minimum').proto.step==1
+        duration=app.sidebar.slider(key='sidebar_duration')
+        assert duration.proto.min==4 and duration.proto.max==24
+        duration.set_value(hours).run()
+        assert not app.exception
+        assert calculate.call_args.args[5]==hours
+        assert configuration.load_settings().duration_hours==hours
+        fresh=AppTest.from_file(APP,default_timeout=20).run()
+        assert not fresh.exception
+        assert fresh.sidebar.slider(key='sidebar_duration').value==hours
+
+
+def test_legacy_slider_values_round_to_new_steps():
+    with patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,exposure_seconds=123,minimum_altitude_deg=49.8,duration_hours=30)):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert app.sidebar.slider(key='sidebar_exposure').value==120
+        assert app.sidebar.slider(key='sidebar_minimum').value==50
+        assert app.sidebar.slider(key='sidebar_duration').value==24
+
+
+def test_main_page_uses_catalogue_directly_and_new_title():
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('objects.resolve_object') as resolver:
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert app.title[0].value=='Astrophotography Planning'
+        assert not app.radio and not app.text_input and not app.form
+        assert target_names(app)==['Fixture high','Fixture low']
+        select_target(app,'Fixture low')
+        assert not app.exception
+        assert app.session_state['selected_target']=='Fixture low'
+        assert len(chart_frames(app))==1
+        resolver.assert_not_called()
+
+
+def test_discovery_uses_configured_limit_and_sampling():
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,max_objects=1,step_minutes=5)), patch('visibility.calculate_tracks',side_effect=fake_tracks) as calculate:
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert len(target_names(app))==1
+        assert target_names(app)==['Fixture high']
+        assert calculate.call_args.args[6]==5
+
+
+def test_night_rating_order_and_selection_survive_score_changes():
+    scores={'Fixture high':40,'Fixture low':90}
+    def ratings(targets,*args):
+        return {t.common_name:dict(score=scores[t.common_name],rain=None,cloud=None,reason='Test rating',start=None,end=None) for t in targets}
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('night_rating.all_ratings',side_effect=ratings):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert target_names(app)==['Fixture low','Fixture high']
+        select_target(app,'Fixture high')
+        assert app.session_state['selected_target']=='Fixture high'
+        scores.update({'Fixture high':95,'Fixture low':None})
+        st.cache_data.clear()
+        app.run()
+        assert not app.exception
+        assert target_names(app)==['Fixture high','Fixture low']
+        assert app.session_state['selected_target']=='Fixture high'
+        assert app.main.subheader[-1].value=='Fixture high'
+        scores.update({'Fixture high':0,'Fixture low':None})
+        st.cache_data.clear()
+        app.run()
+        assert not app.exception
+        assert target_names(app)==['Fixture low','Fixture high']
+
+
+
+def test_target_table_excludes_weather_and_preserves_missing_ratings():
+    def ratings(targets,*args):
+        return {t.common_name:dict(score=None,cloud=None,rain=None,reason='Catalogue dimensions unavailable',start=None,end=None) for t in targets}
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('night_rating.all_ratings',side_effect=ratings):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        table=app.dataframe[0]
+        assert 'Cloud cover' not in table.value.columns
+        assert 'Rain risk' not in table.value.columns
+        assert table.proto.placeholder=='Missing data'
+        assert table.value['Night rating'].isna().all()
+        assert any('Missing data — Catalogue dimensions unavailable' in c.value for c in app.caption)
+
+
+def test_mixed_rating_values_preserve_native_progress_bars():
+    def ratings(targets,*args):
+        return {t.common_name:dict(score=80 if t.common_name=='Fixture low' else None,cloud=None,rain=None,reason='Test',start=None,end=None) for t in targets}
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3)), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('night_rating.all_ratings',side_effect=ratings):
+        app=AppTest.from_file(APP,default_timeout=20).run()
+        assert not app.exception
+        assert app.dataframe[0].value['Night rating'].iloc[0]==80
+        assert pd.isna(app.dataframe[0].value['Night rating'].iloc[1])
+        import json
+        assert json.loads(app.dataframe[0].proto.columns)['Night rating']['type_config']['type']=='progress'

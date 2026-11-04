@@ -107,3 +107,32 @@ def test_exposure_persistence(tmp_path):
     path.write_text('')
     save_settings_changes(path,exposure_seconds=240)
     assert load_settings(path).exposure_seconds == 240
+
+
+@pytest.mark.parametrize('limit',[0,-1,True,2.5,'100'])
+def test_invalid_max_objects(limit):
+    with pytest.raises(ValueError):Settings(max_objects=limit)
+
+
+def test_configurable_object_limit_and_sampling_roundtrip(tmp_path):
+    path=tmp_path/'config.toml'
+    path.write_text('[targets]\nmax_objects=250\n[chart]\nstep_minutes=3\n')
+    settings=load_settings(path)
+    assert settings.max_objects==250 and settings.step_minutes==3
+    from configuration import save_settings_changes
+    save_settings_changes(path,max_objects=12,step_minutes=5)
+    saved=load_settings(path)
+    assert saved.max_objects==12 and saved.step_minutes==5
+
+
+@pytest.mark.parametrize('value',[0,-1,101,True,float('nan')])
+def test_invalid_frame_coverage_threshold(value):
+    with pytest.raises(ValueError):Settings(min_frame_coverage_percent=value)
+
+
+def test_frame_threshold_config_roundtrip(tmp_path):
+    path=tmp_path/'config.toml';path.write_text('[targets]\nmin_frame_coverage_percent=20\n')
+    assert load_settings(path).min_frame_coverage_percent==20
+    from configuration import save_settings_changes
+    save_settings_changes(path,min_frame_coverage_percent=15)
+    assert load_settings(path).min_frame_coverage_percent==15

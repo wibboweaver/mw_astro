@@ -1,3 +1,4 @@
+import numpy as np
 from datetime import date,datetime,timedelta,timezone
 from zoneinfo import ZoneInfo
 
@@ -66,3 +67,25 @@ def test_invalid_time_range():
         night_intervals(start,start,52,0)
     with pytest.raises(ValueError):
         night_intervals(start.replace(tzinfo=None),start,52,0)
+
+
+
+def test_twilight_is_between_solar_thresholds_and_clipped(monkeypatch):
+    import astronomical_night as module
+    start=datetime(2026,11,4,16,tzinfo=timezone.utc)
+    def fake_sun(times,*args):
+        return np.array([-20+abs((t-start).total_seconds()/3600-2)*5 for t in times])
+    monkeypatch.setattr(module,'solar_altitudes',fake_sun)
+    periods=module.twilight_for_chart(start,start+timedelta(hours=4),52,-3)
+    assert len(periods)==2
+    for period in periods:
+        assert start<=period.start<period.end<=start+timedelta(hours=4)
+        assert -18<float(fake_sun([period.start+(period.end-period.start)/2])[0])<-12
+        assert abs((period.end-period.start).total_seconds()-4320)<2
+    middle=start+timedelta(hours=1)
+    clipped=module.twilight_for_chart(middle,start+timedelta(hours=3),52,-3)
+    assert clipped[0].start==middle
+    monkeypatch.setattr(module,'solar_altitudes',lambda times,*args:np.full(len(times),-15.))
+    assert len(module.twilight_for_chart(start,start+timedelta(hours=4),52,-3))==1
+    monkeypatch.setattr(module,'solar_altitudes',lambda times,*args:np.full(len(times),-25.))
+    assert not module.twilight_for_chart(start,start+timedelta(hours=4),52,-3)

@@ -4,7 +4,21 @@ import numpy as np
 
 
 def phase_name(angle):
-    return ('New Moon','Waxing crescent','First quarter','Waxing gibbous','Full Moon','Waning gibbous','Last quarter','Waning crescent')[int((angle%360+22.5)//45)%8]
+    """Describe the phase at an instant, without implying a dated phase event.
+
+    Principal phases are instants, not 45-degree-wide categories. Label only
+    a half-degree neighbourhood as "near" (roughly an hour on either side).
+    """
+    angle = float(angle) % 360
+    if not np.isfinite(angle):
+        raise ValueError('Moon phase angle must be finite.')
+    for event_angle, name in ((0, 'new moon'), (90, 'first quarter'),
+                              (180, 'full moon'), (270, 'last quarter')):
+        distance = abs((angle - event_angle + 180) % 360 - 180)
+        if distance <= 0.5:
+            return f'Near {name}'
+    return ('Waxing crescent', 'Waxing gibbous',
+            'Waning gibbous', 'Waning crescent')[int(angle // 90)]
 
 
 def interference_intervals(times, altitudes, illumination, separation, rules):
@@ -18,7 +32,7 @@ def interference_intervals(times, altitudes, illumination, separation, rules):
     result=[]
     for i in range(len(times)-1):
         cuts={0.,1.}
-        thresholds=((arrays[0],0),(arrays[1],rules['low_illumination_percent']),(arrays[1],rules['high_illumination_percent']),(arrays[2],rules['broadband_min_separation']),(arrays[2],rules['broadband_critical_separation']))
+        thresholds=((arrays[0],rules['minimum_moon_altitude_deg']),(arrays[1],rules['low_illumination_percent']),(arrays[1],rules['high_illumination_percent']),(arrays[2],rules['broadband_min_separation']),(arrays[2],rules['broadband_critical_separation']))
         for values,threshold in thresholds:
             a,b=values[i:i+2]
             if a!=b:
@@ -28,7 +42,7 @@ def interference_intervals(times, altitudes, illumination, separation, rules):
         for left,right in zip(cuts[:-1],cuts[1:]):
             mid=(left+right)/2
             altitude,lit,distance=[v[i]+(v[i+1]-v[i])*mid for v in arrays]
-            if altitude<=0 or lit<rules['low_illumination_percent'] or not (distance<=rules['broadband_min_separation'] or lit>=rules['high_illumination_percent']):
+            if altitude<=rules['minimum_moon_altitude_deg'] or lit<rules['low_illumination_percent'] or not (distance<=rules['broadband_min_separation'] or rules['bright_moon_any_separation'] and lit>=rules['high_illumination_percent']):
                 continue
             level='strong' if lit>=rules['high_illumination_percent'] and distance<=rules['broadband_critical_separation'] else 'possible'
             start=times[i]+(times[i+1]-times[i])*left
@@ -64,7 +78,7 @@ def calculate_moonlight(first,last,latitude,longitude,height,ra,dec,step_minutes
         geocentric_moon=get_body('moon',epochs)
         phase=(geocentric_moon.transform_to(ecliptic).lon.deg-get_sun(epochs).transform_to(ecliptic).lon.deg)%360
     millis=[s.timestamp()*1000 for s in stamps]
-    return dict(intervals=interference_intervals(millis,alt,lit,separation,rules),times=millis,illumination=lit.tolist(),phase_angles=phase.tolist(),enabled=rules['enabled'])
+    return dict(intervals=interference_intervals(millis,alt,lit,separation,rules),times=millis,separation=separation.tolist(),altitudes=alt.tolist(),illumination=lit.tolist(),phase_angles=phase.tolist(),enabled=rules['enabled'])
 
 
 def window_feedback(data,start,end):

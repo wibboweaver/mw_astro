@@ -19,7 +19,7 @@ def test_fetch_validates_units_preserves_zero_and_missing():
         assert data['segments'][0]['end']-data['segments'][0]['start']==3600000
         query=parse_qs(urlparse(call.call_args.args[0]).query)
         assert query['timezone']==['UTC'] and query['timeformat']==['unixtime']
-        assert query['hourly']==['cloud_cover']
+        assert query['hourly']==['cloud_cover,precipitation_probability']
         assert data['retrieved_at']
 
 
@@ -57,7 +57,7 @@ def test_chart_cloud_payload_and_strip():
     assert payload['cloud_forecast']==forecast
     assert 'id="show-clouds"' in html
     assert "'data-cloud-cover'" in html and 'cloud-unavailable' in html
-    assert "y2:visible('clouds')?cloudBottom:bottom" in html
+    assert "y2:weatherBottom()" in html
 
 
 def test_window_summary_weights_partial_hours_and_uses_full_window_percentage():
@@ -80,3 +80,39 @@ def test_window_summary_missing_is_never_clear():
     result=summarise_cloud_window(dict(settings=DEFAULTS,segments=[]),start,start+timedelta(hours=4))
     assert result['average'] is None and result['highest'] is None
     assert result['missing_duration']=='04:00'
+
+
+def test_precipitation_probability_preserves_zero_null_and_preceding_hour():
+    payload=dict(hourly_units={'cloud_cover':'%','precipitation_probability':'%'},hourly=dict(time=[1793318400,1793322000,1793325600],cloud_cover=[0,50,100],precipitation_probability=[0,None,80]))
+    with patch('cloud_forecast.urlopen',return_value=BytesIO(json.dumps(payload).encode())):
+        data=fetch_cloud_forecast(52,-3)
+    rain=data['precipitation_segments']
+    assert [b['percent'] for b in rain]==[0,None,80]
+    assert rain[0]['start']==(1793318400-3600)*1000
+    assert rain[0]['end']==1793318400*1000
+
+
+@pytest.mark.parametrize('values,unit',[([-1],'%'),([101],'%'),([True],'%'),(['bad'],'%'),([0],'mm'),([], '%')])
+def test_invalid_precipitation_response(values,unit):
+    payload=dict(hourly_units={'cloud_cover':'%','precipitation_probability':unit},hourly=dict(time=[1793318400],cloud_cover=[0],precipitation_probability=values))
+    with patch('cloud_forecast.urlopen',return_value=BytesIO(json.dumps(payload).encode())):
+        with pytest.raises(ValueError):fetch_cloud_forecast(52,-3)
+
+
+def test_missing_precipitation_does_not_erase_cloud_forecast():
+    with patch('cloud_forecast.urlopen',return_value=response()):
+        data=fetch_cloud_forecast(52,-3)
+    assert all(b['percent'] is None for b in data['precipitation_segments'])
+    assert data['segments'][0]['percent']==0
+
+
+
+def test_chart_weather_changes_with_coverage_and_matches_selected_subset():
+    from cloud_forecast import chart_weather_summary
+    start=datetime(2026,11,4,18,tzinfo=timezone.utc)
+    base=start.timestamp()*1000
+    data=dict(settings=DEFAULTS,segments=[dict(start=base,end=base+3600000,percent=10),dict(start=base+3600000,end=base+7200000,percent=90)],precipitation_segments=[dict(start=base,end=base+3600000,percent=0),dict(start=base+3600000,end=base+7200000,percent=60)])
+    assert chart_weather_summary(data,start,start+timedelta(hours=2))==dict(cloud=50,rain=60)
+    assert chart_weather_summary(data,start,start+timedelta(hours=1))==dict(cloud=10,rain=0)
+    assert chart_weather_summary(data,start+timedelta(hours=1),start+timedelta(hours=2))==dict(cloud=90,rain=60)
+    assert chart_weather_summary(data,start,start+timedelta(hours=3))==dict(cloud=None,rain=None)

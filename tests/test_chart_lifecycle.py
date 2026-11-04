@@ -11,7 +11,9 @@ def test_click_markers_exist_before_resize_and_survive_redraw(tmp_path):
     node=shutil.which('node')
     if not node:pytest.skip('Node required')
     frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
-    content=chart_html(frame,40,'Europe/London')
+    first=frame.Time[0].timestamp()*1000
+    segments=[dict(start=first+i*14400000,end=first+(i+1)*14400000,percent=value) for i,value in enumerate([0,50,100])]
+    content=chart_html(frame,40,'Europe/London',cloud_forecast=dict(segments=segments,precipitation_segments=segments))
     script=content.split('<script>')[1].split('</script>')[0]
     source=tmp_path/'chart.js';source.write_text(script)
     harness=r'''
@@ -32,6 +34,23 @@ const plot=get('plot');
 const group=()=>plot.children.find(e=>e.attrs.id==='interval-lines');
 const markers=()=>group().children.filter(e=>'data-boundary' in e.attrs);
 assert.ok(group(),'marker layer must be created synchronously');
+const clouds=()=>plot.children.filter(e=>'data-cloud-cover' in e.attrs);
+const rain=()=>plot.children.filter(e=>'data-precip-probability' in e.attrs);
+assert.equal(clouds().length,3);assert.equal(rain().length,3);
+assert.equal(rain()[0].attrs.y-(clouds()[0].attrs.y+clouds()[0].attrs.height),4);
+assert.deepEqual(clouds().map(e=>e.attrs.fill),['rgb(34,197,94)','rgb(251,191,36)','rgb(239,68,68)']);
+assert.deepEqual(rain().map(e=>e.attrs.fill),clouds().map(e=>e.attrs.fill));
+assert.ok(plot.children.some(a=>a.attrs.href==='https://open-meteo.com/en/docs'&&a.attrs.target==='_blank'&&a.children.some(e=>e.textContent==='Cloud'&&e.attrs.x<clouds()[0].attrs.x)));
+assert.ok(plot.children.some(a=>a.attrs.href==='https://open-meteo.com/en/docs'&&a.attrs.rel==='noopener noreferrer'&&a.children.some(e=>e.textContent==='Precip.'&&e.attrs.x<rain()[0].attrs.x)));
+plot.handlers.pointermove({clientX:200,clientY:320});
+assert.match(get('tip').textContent,/Precipitation probability 0%/);
+plot.handlers.pointermove({clientX:200,clientY:301});
+assert.match(get('tip').textContent,/Cloud cover 0%/);
+plot.handlers.pointermove({clientX:200,clientY:312});
+assert.equal(get('tip').style.display,'none');
+get('show-precip').checked=false;get('show-precip').onchange();
+assert.equal(rain().length,0);assert.equal(clouds().length,3);
+get('show-precip').checked=true;get('show-precip').onchange();
 plot.handlers.click({clientX:200,clientY:100});
 assert.equal(markers().length,1);
 plot.handlers.pointermove({clientX:400,clientY:100});

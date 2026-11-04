@@ -71,7 +71,7 @@ global.sessionStorage={getItem:k=>stored.get(k)||null, setItem:(k,v)=>stored.set
 global.DOMPoint=class {constructor(x,y){this.x=x;this.y=y} matrixTransform(m){return {x:this.x*m.a,y:this.y*m.d}}};
 const captured=new Set();
 const element=id=>{if(!elements.has(id)) elements.set(id, {value:0, attrs:{}, classList:{add(){},remove(){}},
- setAttribute(k,v){this.attrs[k]=v}, getScreenCTM(){return {inverse:()=>({a:2.5,d:2.5})}},
+ getAttribute(k){return this.attrs[k]}, setAttribute(k,v){this.attrs[k]=v}, getScreenCTM(){return {inverse:()=>({a:2.5,d:2.5})}},
  setPointerCapture(id){captured.add(id)},hasPointerCapture(id){return captured.has(id)},releasePointerCapture(id){captured.delete(id)}}); return elements.get(id)};
 const root={querySelector:selector=>element(selector.slice(1))};
 const data={image:'data:image/jpeg;base64,abc',width:300,height:200,fov_width:2.4,fov_height:1.6,image_field:4.5,rotation:20,camera_width_px:6248,camera_height_px:4176,view_key:'A'};

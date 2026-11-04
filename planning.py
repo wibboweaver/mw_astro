@@ -1,10 +1,8 @@
-"""Offline imaging-session assessment. Acceptance never arms equipment."""
-from dataclasses import dataclass, asdict
+"""Offline imaging-session calculations for the Markdown planning report."""
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import json
 import math
-import uuid
 import tomllib
 import numpy as np
 
@@ -12,7 +10,7 @@ DEFAULTS = {
     'enabled': True, 'allow_warning_override': True, 'allow_unknown_advisory_override': True,
     'darkness': dict(enabled=True, preferred_sun_altitude=-18., maximum_sun_altitude=-12.),
     'visibility': dict(enabled=True, preferred_min_altitude=40., absolute_min_altitude=30., horizon_clearance_margin=3., sample_interval_minutes=2),
-    'moon': dict(enabled=True, broadband_min_separation=60., broadband_critical_separation=30., high_illumination_percent=70., low_illumination_percent=30., dualband_sensitivity_factor=.5),
+    'moon': dict(enabled=True, minimum_moon_altitude_deg=0.0, bright_moon_any_separation=True, broadband_min_separation=60., broadband_critical_separation=30., high_illumination_percent=70., low_illumination_percent=30., dualband_sensitivity_factor=.5),
     'integration': dict(enabled=True, preferred_minutes=90., minimum_minutes=30., preferred_exposures=30, minimum_exposures=10),
     'exposure': dict(enabled=True, min_seconds=1., max_seconds=600., download_overhead_seconds=3., dither_interval_exposures=3, dither_overhead_seconds=15., autofocus_overhead_seconds=180., meridian_flip_overhead_seconds=300., initial_setup_minutes=10.),
     'framing': dict(enabled=True, minimum_target_coverage_percent=100., preferred_edge_margin_percent=5.),
@@ -42,7 +40,7 @@ def load_rules(path=None):
             else:
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                     raise ValueError(f'{name} must be finite.')
-                if key not in ('preferred_sun_altitude', 'maximum_sun_altitude') and value < 0:
+                if key not in ('preferred_sun_altitude', 'maximum_sun_altitude', 'minimum_moon_altitude_deg') and value < 0:
                     raise ValueError(f'{name} must be nonnegative.')
                 if key in ('sample_interval_minutes', 'dither_interval_exposures') and (type(value) is not int or value < 1):
                     raise ValueError(f'{name} must be a positive integer.')
@@ -57,6 +55,8 @@ def load_rules(path=None):
     for key, value in rules['timing'].items():
         if type(value) is not int or not 0 <= value <= 23:
             raise ValueError(f'timing.{key} must be an hour from 0 to 23.')
+    if not -90 <= rules['moon']['minimum_moon_altitude_deg'] <= 90:
+        raise ValueError('moon.minimum_moon_altitude_deg must be -90 to 90 degrees.')
     for key in ('low_illumination_percent','high_illumination_percent'):
         if not 0 <= rules['moon'][key] <= 100:
             raise ValueError(f'moon.{key} must be 0 to 100 percent.')
@@ -85,7 +85,7 @@ class Plan:
             raise ValueError('End must follow start, within 48 hours. Use explicit dates for overnight sessions.')
         if isinstance(self.exposure_seconds, bool) or not math.isfinite(self.exposure_seconds) or self.exposure_seconds <= 0:
             raise ValueError('Exposure must be positive and finite.')
-        if self.filter_name not in ('No filter', 'DB2 dual-band'):
+        if self.filter_name not in ('No filter', 'Dualband Filter'):
             raise ValueError('Unknown filter.')
 
     @property
@@ -107,6 +107,7 @@ class Report:
     integration_minutes: float
     moon_feedback: dict | None = None
     cloud_feedback: dict | None = None
+    sky_feedback: dict | None = None
 
     @property
     def status(self):
@@ -213,12 +214,12 @@ def assess(plan, rules, *, altitudes, horizons, sun_altitudes, moon_altitudes,
         up = np.asarray(moon_altitudes) > 0
         separation = float(np.min(np.asarray(moon_separations)[up])) if up.any() else 180.
         illumination = float(np.max(np.asarray(moon_illumination)[up])) if up.any() else 0.
-        factor = m['dualband_sensitivity_factor'] if plan.filter_name == 'DB2 dual-band' else 1
+        factor = m['dualband_sensitivity_factor'] if plan.filter_name == 'Dualband Filter' else 1
         status = 'Unsuitable' if separation < m['broadband_critical_separation']*factor and illumination >= m['high_illumination_percent'] else 'Challenging' if separation < m['broadband_min_separation']*factor and illumination >= m['low_illumination_percent'] else 'Suitable'
         add('Moon interference',status,f'Moon is bright and only {separation:.0f}° from the object')
     f = rules['filter']
     if f['enabled']:
-        status = 'Unknown' if filter_recommended is None else 'Challenging' if f['warn_on_target_mismatch'] and filter_recommended != (plan.filter_name == 'DB2 dual-band') else 'Suitable'
+        status = 'Unknown' if filter_recommended is None else 'Challenging' if f['warn_on_target_mismatch'] and filter_recommended != (plan.filter_name == 'Dualband Filter') else 'Suitable'
         add('Filter suitability',status,'Filter suitability is unknown' if filter_recommended is None else 'Selected filter may not suit this object')
         if f['require_filter_confirmation']:
             add('Filter confirmation','Suitable' if plan.filter_confirmed else 'Challenging','Confirm the fitted filter')
@@ -289,20 +290,6 @@ def evaluate(plan, target, settings, rules, profile=None):
     return assess(plan,rules,altitudes=alt,horizons=horizon_altitudes(profile,az) if profile is not None else np.zeros(len(alt)),sun_altitudes=sun_alt,moon_altitudes=moon_alt,moon_separations=separation,moon_illumination=illumination,crossing=plan.start.astimezone(timezone.utc) <= transit.astimezone(timezone.utc) <= plan.end.astimezone(timezone.utc),sample_seconds=[(t-times[0]).total_seconds() for t in times],filter_recommended=recommended,target_major_arcmin=size[0] if size else None,fov=field_of_view(settings.focal_length_mm,settings.sensor_width_mm,settings.sensor_height_mm))
 
 
-def save_accepted(plan, report, rules, directory, acknowledged=False):
-    from configuration import _atomic_write
-    if not rules['enabled'] or not report.can_accept(rules,acknowledged):
-        raise ValueError('Resolve blockers and acknowledge allowed advisories before accepting.')
-    payload = dict(schema_version=1,status='accepted',execution_status='not_armed',accepted_at=datetime.now(timezone.utc).isoformat(),acknowledged=acknowledged,plan={**asdict(plan),'start':plan.start.isoformat(),'end':plan.end.isoformat()},report={'status':report.status,'checks':[asdict(c) for c in report.checks],'exposures':report.exposures,'integration_minutes':report.integration_minutes,'moon_feedback':report.moon_feedback,'cloud_feedback':report.cloud_feedback},rules=rules)
-    directory = Path(directory)
-    directory.mkdir(parents=True,exist_ok=True)
-    destination = directory/(str(uuid.uuid4())+'.json')
-    _atomic_write(destination,json.dumps(payload,indent=2,allow_nan=False)+'\n')
-    return destination
-
-
-
-
 def limited_observation_seconds(seconds, altitudes, horizons, minimum_altitude, sample_seconds=None):
     """Time below the altitude limit OR behind the horizon, with overlap counted once."""
     times=np.asarray(sample_seconds if sample_seconds is not None else np.linspace(0,seconds,len(altitudes)),dtype=float)
@@ -327,7 +314,7 @@ def limited_observation_seconds(seconds, altitudes, horizons, minimum_altitude, 
 
 
 def checklist_report(plan, rules, minimum_altitude, altitudes, horizons, sun_altitudes, exposures, sample_seconds=None):
-    """The fixed checklist displayed in Observation Feedback."""
+    """Calculate the geometry, timing and integration checks used by the report."""
     checks=[]
     def row(name, ok, yes, no, blocker=False):
         checks.append(Check(name,'Suitable' if ok else 'Unsuitable' if blocker else 'Challenging',yes if ok else no))
@@ -337,12 +324,20 @@ def checklist_report(plan, rules, minimum_altitude, altitudes, horizons, sun_alt
             f'Object is below the minimum altitude ({minimum_altitude:g}°)',True)
         row(f'{label} horizon',altitudes[index]>horizons[index],
             'Object is above the local horizon','Object is below the local horizon',True)
-        row(f'{label} night',sun_altitudes[index]<=rules['darkness']['preferred_sun_altitude'],
-            'Astronomical night is occurring','Astronomical night is not occurring',True)
-    hours=plan.seconds/3600
+        solar=float(sun_altitudes[index])
+        if not math.isfinite(solar):
+            checks.append(Check(f'{label} night','Unknown','Solar altitude is unavailable. Check sky conditions on site.'))
+        elif solar<=-18:
+            checks.append(Check(f'{label} night','Suitable','Astronomical night is occurring (Sun at or below −18°).'))
+        elif solar<=-12:
+            checks.append(Check(f'{label} night','Challenging','Astronomical twilight is occurring (Sun between −18° and −12°). Assess background brightness for your target and filter.'))
+        else:
+            checks.append(Check(f'{label} night','Challenging','Conditions are brighter than astronomical twilight (Sun above −12°). Assess whether your intended capture is worthwhile.'))
+    minutes=round(plan.seconds/60)
+    duration=f'{minutes//60:02d}:{minutes%60:02d}'
     row('Observation duration',plan.seconds>=rules['integration']['preferred_minutes']*60,
-        f'Total observation time is sufficient ({hours:.1f} hours)',
-        f'Total observation time may be too short ({hours:.1f} hours)')
+        f'Total observation time is sufficient ({duration})',
+        f'Total observation time may be too short ({duration})')
     row('Exposure count',exposures>=rules['integration']['preferred_exposures'],
         f'Number of exposures is sufficient ({exposures})',
         f'Number of exposures is small ({exposures})')
@@ -352,17 +347,28 @@ def checklist_report(plan, rules, minimum_altitude, altitudes, horizons, sun_alt
     late=hour>=timing['late_start_hour']
     row('Start timing',not (early or late),'Observation starts at a convenient time',
         'Observation begins in the early hours' if early else 'Observation does not begin until late')
-    clearance=np.asarray(altitudes)-np.asarray(horizons)
-    obscured,_=visibility_durations(plan.seconds,clearance,clearance,sample_seconds)
-    total_minutes=round(obscured/60)
-    percentage=obscured/plan.seconds*100
-    checks.append(Check('Obscured duration','Suitable' if obscured<.5 else 'Unsuitable',
-        f'The object is obscured for {total_minutes//60:02d}:{total_minutes%60:02d} ({percentage:.0f} %) of the total observation time'))
     limited=limited_observation_seconds(plan.seconds,altitudes,horizons,minimum_altitude,sample_seconds)
     limited_minutes=round(limited/60)
     checks.append(Check('Limited observation duration','Suitable' if limited<.5 else 'Unsuitable',
-        f'The object is either below the minimum specified altitude or obscured by the local horizon for {limited_minutes//60:02d}:{limited_minutes%60:02d} ({limited/plan.seconds*100:.0f} %) of the total observation time'))
-    return Report(checks,exposures,exposures*plan.exposure_seconds/60)
+        f'The object is below the minimum altitude and/or obscured by the local horizon for {limited_minutes//60:02d}:{limited_minutes%60:02d} ({limited/plan.seconds*100:.0f}%) of the observation window'))
+    result=Report(checks,exposures,exposures*plan.exposure_seconds/60)
+    times=np.asarray(sample_seconds if sample_seconds is not None else np.linspace(0,plan.seconds,len(sun_altitudes)),dtype=float)
+    solar=np.asarray(sun_altitudes,dtype=float)
+    if len(times)>=2 and np.isfinite(solar).all():
+        totals=dict(night=0.,twilight=0.,brighter=0.)
+        for i in range(len(times)-1):
+            a,b=solar[i:i+2];cuts={0.,1.}
+            if a!=b:
+                for threshold in (-18.,-12.):
+                    f=(threshold-a)/(b-a)
+                    if 0<f<1:cuts.add(float(f))
+            cuts=sorted(cuts)
+            for left,right in zip(cuts,cuts[1:]):
+                value=a+(b-a)*(left+right)/2
+                key='night' if value<=-18 else 'twilight' if value<=-12 else 'brighter'
+                totals[key]+=(times[i+1]-times[i])*(right-left)
+        result.sky_feedback=totals
+    return result
 
 
 def evaluate_checklist(plan, target, settings, rules, profile=None, moon_data=None):

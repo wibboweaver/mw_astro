@@ -37,7 +37,34 @@ assert.deepEqual(p.summary([start],300,start+11100000),{seconds:11100,images:37}
 assert.deepEqual(p.summary([start],300,start+600000),{seconds:600,images:2});
 assert.deepEqual(p.summary([start,start+3600000],300,start+7200000),{seconds:3600,images:12});
 assert.deepEqual(p.summary([],300,start+600000),null);
+assert.equal(p.interpolate([0,1000],[30,60],500),45);
+assert.equal(p.interpolate([0,1000],[30,60],-100),30);
+assert.equal(p.interpolate([0,1000],[30,60],1200),60);
+assert.equal(p.interpolate(undefined,undefined,500),null);
+assert.equal(p.interpolate([0,1000],[null,60],500),null);
 assert.throws(()=>p.summary(points,0));
 assert.throws(()=>p.summary(points,NaN));
 '''
+    subprocess.run([node,'-e',script,str(module)],check=True,capture_output=True,text=True)
+
+
+def test_moon_phase_icons_and_impact_ratings():
+    node=shutil.which('node')
+    if not node:pytest.skip('Node required')
+    module=Path(__file__).resolve().parents[1]/'observation.js'
+    script=r"""
+const assert=require('node:assert/strict'),p=require(process.argv[1]);
+assert.equal(p.moonPhase(0).name,'New Moon');
+assert.equal(p.moonPhase(90).name,'First quarter');
+assert.equal(p.moonPhase(180).name,'Full Moon');
+assert.equal(p.moonPhase(270).name,'Last quarter');
+assert.equal(p.moonPhase(359).name,'New Moon');
+assert.equal(p.moonPhase(null).name,'Moon phase unavailable');
+const intervals=[{start:10,end:20,level:'possible'},{start:20,end:30,level:'strong'}];
+assert.equal(p.moonRating(50,30,80,intervals,5,true),'Low impact');
+assert.equal(p.moonRating(50,30,80,intervals,15,true),'Moderate impact');
+assert.equal(p.moonRating(20,30,80,intervals,25,true),'High impact');
+assert.equal(p.moonRating(50,30,80,intervals,15,false),'Unknown');
+assert.equal(p.moonRating(null,30,80,intervals,15,true),'Unknown');
+"""
     subprocess.run([node,'-e',script,str(module)],check=True,capture_output=True,text=True)

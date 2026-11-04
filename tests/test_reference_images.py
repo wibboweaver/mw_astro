@@ -37,7 +37,7 @@ def test_valid_jpeg_response():
     Image.new('RGB', (600, 600)).save(output, format='JPEG')
     with patch('reference_images.urlopen', return_value=BytesIO(output.getvalue())) as request:
         assert fetch_preview(10, 40, 1) == output.getvalue()
-        assert request.call_args.kwargs['timeout'] == 6
+        assert request.call_args.kwargs['timeout'] == 30
 
 
 @pytest.mark.parametrize('body', [b'<html>upstream error</html>', b'{"error": "no image"}'])
@@ -84,3 +84,15 @@ def test_corrupt_primary_image_uses_mirror():
     image=jpeg()
     with patch('reference_images.urlopen',side_effect=[BytesIO(b'not an image'),BytesIO(image)]):
         assert fetch_preview(10,40,1)==image
+
+
+
+def test_successful_images_stay_cached_but_failures_expire():
+    from reference_images import preview_needs_request
+    assert preview_needs_request(None,2,now=10)
+    assert not preview_needs_request({'image':b'jpeg','error':None},2,now=999999)
+    failed=dict(image=None,error='timeout',source_version=2,retry_after=70)
+    assert not preview_needs_request(failed,2,now=69)
+    assert preview_needs_request(failed,2,now=70)
+    assert preview_needs_request(failed,3,now=10)
+    assert preview_needs_request({'image':None,'error':'old cached failure'},2,now=10)

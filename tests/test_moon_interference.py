@@ -28,7 +28,19 @@ def test_multiple_periods_clipping_and_full_window_denominator():
     assert empty['percent']==0 and empty['duration']=='00:00'
 
 
-@pytest.mark.parametrize('angle,name',[(0,'New Moon'),(45,'Waxing crescent'),(90,'First quarter'),(135,'Waxing gibbous'),(180,'Full Moon'),(225,'Waning gibbous'),(270,'Last quarter'),(315,'Waning crescent'),(359,'New Moon')])
+@pytest.mark.parametrize('angle,name',[
+    (0, 'Near new moon'), (360, 'Near new moon'),
+    (359.5, 'Near new moon'), (0.5, 'Near new moon'),
+    (359, 'Waning crescent'), (1, 'Waxing crescent'),
+    (18, 'Waxing crescent'), (45, 'Waxing crescent'),
+    (89, 'Waxing crescent'), (90, 'Near first quarter'),
+    (91, 'Waxing gibbous'), (135, 'Waxing gibbous'),
+    (179, 'Waxing gibbous'), (180, 'Near full moon'),
+    (181, 'Waning gibbous'), (225, 'Waning gibbous'),
+    (269, 'Waning gibbous'), (270, 'Near last quarter'),
+    (271, 'Waning crescent'), (315, 'Waning crescent'),
+    (-1, 'Waning crescent'),
+])
 def test_phase_names(angle,name):assert phase_name(angle)==name
 
 
@@ -42,5 +54,50 @@ def test_real_ephemeris_illumination_and_no_minimum_altitude_dependency():
     first=datetime(2024,4,8,18,tzinfo=timezone.utc)
     data=calculate_moonlight(first,first+timedelta(hours=1),52,-3,40,10,40,2,rules())
     assert max(data['illumination'])<1
-    assert phase_name(data['phase_angles'][0])=='New Moon'
+    assert phase_name(data['phase_angles'][0])=='Near new moon'
     assert data['intervals']==[]
+
+
+def test_configured_bright_moon_and_altitude_rules(tmp_path):
+    from planning import load_rules
+    path=tmp_path/'config.toml'
+    path.write_text('[planning_rules.moon]\nbright_moon_any_separation=false\nminimum_moon_altitude_deg=10\nlow_illumination_percent=40\nbroadband_min_separation=50\n')
+    custom=load_rules(path)['moon']
+    assert interference_intervals([0,1000],[20,20],[90,90],[80,80],custom)==[]
+    assert interference_intervals([0,1000],[5,5],[90,90],[20,20],custom)==[]
+    assert interference_intervals([0,1000],[20,20],[35,35],[20,20],custom)==[]
+    assert interference_intervals([0,1000],[20,20],[50,50],[55,55],custom)==[]
+    assert interference_intervals([0,1000],[20,20],[50,50],[45,45],custom)
+    # Crossing the configured altitude threshold must move the indicator boundary.
+    interval=interference_intervals([0,1000],[0,20],[90,90],[20,20],custom)
+    assert interval[0]['start']==500
+
+
+def test_invalid_configured_moon_altitude_and_switch(tmp_path):
+    from planning import load_rules
+    path=tmp_path/'config.toml'
+    for value in ('minimum_moon_altitude_deg=91','bright_moon_any_separation=1'):
+        path.write_text('[planning_rules.moon]\n'+value+'\n')
+        with pytest.raises(ValueError):load_rules(path)
+
+
+@pytest.mark.parametrize('angle', [float('nan'), float('inf'), -float('inf')])
+def test_invalid_phase_angle(angle):
+    with pytest.raises(ValueError):
+        phase_name(angle)
+
+
+def test_december_2026_new_moon_is_not_a_multiday_label():
+    first = datetime(2026, 12, 8, tzinfo=timezone.utc)
+    data = calculate_moonlight(first, first + timedelta(days=3),
+                              52.293232, -3.036226, 40, 10, 40, 60, rules())
+    expected = [(datetime(2026, 12, 8, 17, tzinfo=timezone.utc), 'Waning crescent'),
+                (datetime(2026, 12, 9, tzinfo=timezone.utc), 'Near new moon'),
+                (datetime(2026, 12, 10, 17, tzinfo=timezone.utc), 'Waxing crescent')]
+    for start, label in expected:
+        result = window_feedback(data, start, start + timedelta(hours=1))
+        assert result['phase'] == label
+    # Interpolating across the 360 -> 0 boundary must preserve direction.
+    result = window_feedback(data, datetime(2026, 12, 9, 1, tzinfo=timezone.utc),
+                             datetime(2026, 12, 9, 2, tzinfo=timezone.utc))
+    assert result['phase'] == 'Near new moon'

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None):
+def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=()):
     import math
     if not math.isfinite(exposure_seconds) or exposure_seconds <= 0:
         raise ValueError("Exposure must be positive and finite.")
@@ -15,11 +15,13 @@ def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable",
         "alt": frame["Altitude (°)"].tolist(),
         "az": frame["Azimuth (°)"].tolist(),
         "cloud_forecast": cloud_forecast,
+        "moon_distance": moon_distance,
         "moon_interference": list(moon_intervals),
         "horizon": frame["Horizon (°)"].tolist() if "Horizon (°)" in frame else None,
         "minimum": float(minimum_altitude_deg), "timezone": timezone,
         "object_size": object_size, "exposure_seconds": float(exposure_seconds),
         "target_key": target_key,
+        "astronomical_twilight": [[int(i.start.timestamp()*1000),int(i.end.timestamp()*1000)] for i in twilight_periods],
         "astronomical_night": [[int(interval.start.timestamp()*1000), int(interval.end.timestamp()*1000)] for interval in night_periods],
     }
     # Escape HTML-significant characters, including user-controlled timezone text.
@@ -36,7 +38,7 @@ from functools import lru_cache
 def chart_component():
     from streamlit.components.v2 import component
     return component('observation_chart',
-        html='<iframe title="Target altitude chart" style="width:100%;height:765px;border:0" sandbox="allow-scripts allow-same-origin"></iframe>',
+        html='<iframe title="Target altitude chart" style="width:100%;height:665px;border:0" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>',
         js=Path(__file__).with_name('chart_bridge.js').read_text())
 
 

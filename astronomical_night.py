@@ -25,7 +25,7 @@ def solar_altitudes(times, latitude, longitude, height=0):
         return get_sun(moments).transform_to(AltAz(obstime=moments, location=location, pressure=0*u.hPa)).alt.deg
 
 
-def night_intervals(start, end, latitude, longitude, height=0):
+def night_intervals(start, end, latitude, longitude, height=0, threshold=-18):
     """Return dark intervals clipped to an aware UTC range; refine events to 1 s."""
     if start.tzinfo is None or end.tzinfo is None or start.utcoffset() is None or end.utcoffset() is None:
         raise ValueError('Night calculation requires timezone-aware times.')
@@ -35,7 +35,7 @@ def night_intervals(start, end, latitude, longitude, height=0):
     offsets = np.append(np.arange(0, (end-start).total_seconds(), 120), (end-start).total_seconds())
     times = [start+timedelta(seconds=float(seconds)) for seconds in offsets]
     altitudes = solar_altitudes(times, latitude, longitude, height)
-    dark = np.asarray(altitudes) < -18
+    dark = np.asarray(altitudes) < threshold
     intervals = []
     opened = (start, False) if dark[0] else None
     for index in np.flatnonzero(dark[:-1] != dark[1:]):
@@ -43,7 +43,7 @@ def night_intervals(start, end, latitude, longitude, height=0):
         left_dark = bool(dark[index])
         while (right-left).total_seconds() > 1:
             middle = left+(right-left)/2
-            middle_dark = float(solar_altitudes([middle], latitude, longitude, height)[0]) < -18
+            middle_dark = float(solar_altitudes([middle], latitude, longitude, height)[0]) < threshold
             if middle_dark == left_dark:
                 left = middle
             else:
@@ -81,3 +81,18 @@ def night_text(intervals, evening_date, timezone_name):
     beginning = interval.start.astimezone(zone).strftime('%H:%M') if interval.start_is_event and interval.start >= noon else 'before local noon'
     ending = interval.end.astimezone(zone).strftime('%H:%M') if interval.end_is_event and interval.end <= next_noon else 'after next local noon'
     return f'Astronomical night ({timezone_name})  \nStart: {beginning}  \nEnd: {ending}'
+
+
+def twilight_for_chart(chart_start,chart_end,latitude,longitude,height=0):
+    """Astronomical twilight only: Sun between -12 and -18 degrees, clipped."""
+    outer=night_intervals(chart_start,chart_end,latitude,longitude,height,threshold=-12)
+    dark=night_intervals(chart_start,chart_end,latitude,longitude,height)
+    result=[]
+    for interval in outer:
+        cursor=interval.start
+        for night in dark:
+            if night.end<=cursor or night.start>=interval.end:continue
+            if night.start>cursor:result.append(NightInterval(cursor,min(night.start,interval.end),False,False))
+            cursor=max(cursor,night.end)
+        if cursor<interval.end:result.append(NightInterval(cursor,interval.end,False,False))
+    return tuple(result)

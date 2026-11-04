@@ -6,11 +6,14 @@
 svg{display:block;width:100%;height:375px;touch-action:none;overflow:visible}
 text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
 .layers{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 2px 14px}.layers label{cursor:pointer}
-.cards{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:12px;margin:10px 2px 0}
+.cards{display:grid;grid-template-columns:1fr 1fr 1.3fr 3fr;gap:12px;margin:10px 2px 0}
 .card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;min-width:0}
-.size-card{grid-column:1/-1}.size-card .value{font-size:20px}
+@media(max-width:650px){.cards{grid-template-columns:1fr 1fr}}
+.size-card .value{font-size:20px}
+.moon-card{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:12px}.moon-phase{font-size:46px;line-height:1;flex:none}.moon-details{font-size:13px;line-height:1.6}.moon-details span{white-space:nowrap}.moon-summary{font-size:13px;line-height:1.6;min-width:0;margin-left:6px}
+@media(max-width:650px){.moon-card{grid-column:1/-1}}
 .label{font-size:14px;margin-bottom:4px}.value{font-size:clamp(16px,3.5vw,25px);white-space:nowrap;font-weight:500}
-.observation{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 2px 0}
+.observation{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 2px 0}
 .actions{display:flex;align-items:center;gap:10px;margin:8px 2px;font-size:12px}
 button{background:transparent;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer}
 #tip{position:absolute;display:none;pointer-events:none;background:var(--tip);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:13px}
@@ -23,15 +26,20 @@ button{background:transparent;color:var(--ink);border:1px solid var(--border);bo
 <label><input type="checkbox" id="show-minimum" checked> Minimum altitude</label>
 <label><input type="checkbox" id="show-moonlight" checked> Moonlight interference</label>
 <label><input type="checkbox" id="show-clouds" checked> Cloud cover</label>
+<label><input type="checkbox" id="show-precip" checked> Precipitation</label>
 </div>
-<div id="cloud-info" style="font-size:12px;margin:0 2px 10px"></div>
 <div class="cards">
  <div class="card"><div class="label">Alt</div><div id="alt" class="value">—</div></div>
  <div class="card"><div class="label">Azi</div><div id="az" class="value">—</div></div>
  <div class="card"><div id="datetime-label" class="label">Time</div><div id="datetime" class="value">—</div></div>
- <div class="card size-card"><div class="label">Object size</div><div id="object-size" class="value">—</div></div>
+ <div class="card moon-card" aria-label="Moon conditions">
+  <span id="moon-phase" class="moon-phase" role="img" aria-label="Moon phase unavailable">○</span>
+  <div class="moon-details"><div>Angle: <span id="moon-distance">—</span></div><div>Illumination: <span id="moon-illumination">—</span></div></div>
+  <div class="moon-summary"><div>Phase: <span id="moon-phase-name">Unavailable</span></div><div>Rating: <span id="moon-rating">Unknown</span></div></div>
+ </div>
 </div>
 <div class="observation">
+ <div class="card size-card"><div class="label">Object size</div><div id="object-size" class="value">—</div></div>
  <div class="card"><div class="label">Observation duration</div><div id="duration" class="value">—</div></div>
  <div class="card"><div class="label">Images (exposure only)</div><div id="images" class="value">—</div></div>
 </div>
@@ -44,14 +52,14 @@ const timeFormat=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2
 document.getElementById('datetime-label').textContent=`Time (${data.timezone})`;
 document.getElementById('object-size').textContent=data.object_size;
 let selectedTime=data.times[0], width;
-const plotTop=15,bottom=285,left=45,right=15,cloudTop=292,cloudBottom=310;
+const plotTop=15,bottom=285,left=55,right=15,cloudTop=292,cloudBottom=310,precipTop=cloudBottom+4,precipBottom=precipTop+18;
 const low=Math.min(0,...data.alt,...(data.horizon||[])), high=Math.max(90,...data.alt,data.minimum,...(data.horizon||[]));
 const minY=Math.floor(low/10)*10,maxY=Math.ceil(high/10)*10;
 const t0=data.times[0], t1=data.times.at(-1);
 const storageKey=`mw-astro-interval:${data.target_key}:${t0}:${t1}`;
 let boundaries=[];
 try{boundaries=Observation.restore(sessionStorage.getItem(storageKey),t0,t1);}catch(_){}
-const layerKey='mw-astro-chart-layers', layerNames=['horizon','object','minimum','moonlight','clouds'];
+const layerKey='mw-astro-chart-layers', layerNames=['horizon','object','minimum','moonlight','clouds','precip'];
 try{const saved=JSON.parse(sessionStorage.getItem(layerKey));for(const name of layerNames){if(typeof saved?.[name]==='boolean')document.getElementById('show-'+name).checked=saved[name];}}catch(_){}
 if(!data.horizon)document.getElementById('show-horizon').disabled=true;
 
@@ -62,45 +70,66 @@ const y=a=>bottom-(a-minY)/(maxY-minY)*(bottom-plotTop);
 function el(tag,attrs,parent=svg){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);parent.append(e);return e;}
 function text(value,attrs){const e=el('text',attrs);e.textContent=value;return e;}
 function path(values,color,dash){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(data.times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
+const weatherRows=[
+ {layer:'clouds',label:'Cloud',key:'segments',top:cloudTop,bottom:cloudBottom,attribute:'data-cloud-cover',unavailable:'data-cloud-unavailable',description:'Cloud cover'},
+ {layer:'precip',label:'Precip.',key:'precipitation_segments',top:precipTop,bottom:precipBottom,attribute:'data-precip-probability',unavailable:'data-precip-unavailable',description:'Precipitation probability'}
+];
+function conditionColour(percent){
+ const stops=[[34,197,94],[251,191,36],[239,68,68]],position=Math.max(0,Math.min(100,percent))/50;
+ const index=Math.min(1,Math.floor(position)),fraction=position-index;
+ return 'rgb('+stops[index].map((v,i)=>Math.round(v+(stops[index+1][i]-v)*fraction)).join(',')+')';
+}
+function weatherText(row,block){return `${timeFormat.format(block.start)}–${timeFormat.format(block.end)} · ${row.description} ${block.percent}%`;}
+function weatherBottom(){return visible('precip')?precipBottom:visible('clouds')?cloudBottom:bottom;}
 let marker,guide;
 function draw(){
  width=Math.max(280,svg.getBoundingClientRect().width);svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${width} 375`);
+ for(const period of data.astronomical_twilight||[]){
+  const beginning=Math.max(t0,period[0]),ending=Math.min(t1,period[1]);
+  if(ending>beginning)el('rect',{'data-astronomical-twilight':'true',x:x(beginning),y:plotTop,width:x(ending)-x(beginning),height:bottom-plotTop,fill:'#f59e0b','fill-opacity':0.18,'pointer-events':'none'});
+ }
  for(const period of data.astronomical_night||[]){
   const beginning=Math.max(t0,period[0]),ending=Math.min(t1,period[1]);
   if(ending>beginning)el('rect',{'data-astronomical-night':'true',x:x(beginning),y:plotTop,width:x(ending)-x(beginning),height:bottom-plotTop,fill:'#969fc5','fill-opacity':0.16,'pointer-events':'none'});
  }
- if(visible('moonlight'))for(const period of data.moon_interference||[]){
-  const beginning=Math.max(t0,period.start),ending=Math.min(t1,period.end);
-  if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffff00','fill-opacity':0.5,'pointer-events':'none'});
+ if(data.horizon&&visible('horizon')){
+  const outline=data.horizon.map((alt,i)=>'L'+x(data.times[i])+','+y(alt)).join(' ');
+  el('path',{'data-horizon-shading':'true',d:`M${x(t0)},${bottom} ${outline} L${x(t1)},${bottom} Z`,fill:'#ff0000','fill-opacity':0.6,'pointer-events':'none'});
  }
- const forecast=data.cloud_forecast,cloudInfo=document.getElementById('cloud-info');
- cloudInfo.textContent='';
- if(visible('clouds')){
-  const defs=el('defs',{}),pattern=el('pattern',{id:'cloud-unavailable',width:6,height:6,patternUnits:'userSpaceOnUse'},defs);
+
+ const forecast=data.cloud_forecast;
+ for(const row of weatherRows){
+  if(!visible(row.layer))continue;
+  const defs=el('defs',{}),pattern=el('pattern',{id:row.layer+'-unavailable',width:6,height:6,patternUnits:'userSpaceOnUse'},defs);
   el('path',{d:'M-1 1L1 -1M0 6L6 0M5 7L7 5',stroke:'#888','stroke-width':1},pattern);
-  el('rect',{'data-cloud-unavailable':'true',x:left,y:cloudTop,width:width-left-right,height:cloudBottom-cloudTop,fill:'url(#cloud-unavailable)'});
-  const limits=forecast?.settings||{clear_max_percent:20,light_max_percent:50,medium_max_percent:80};
-  for(const block of forecast?.segments||[]){
+  const link=el('a',{href:'https://open-meteo.com/en/docs',target:'_blank',rel:'noopener noreferrer','aria-label':row.description+' forecast source: Open-Meteo'});
+  const linkTitle=el('title',{},link);linkTitle.textContent='Open-Meteo forecast source and documentation';
+  const rowLabel=el('text',{x:left-6,y:(row.top+row.bottom)/2,'text-anchor':'end','dominant-baseline':'central','text-decoration':'underline',cursor:'pointer'},link);
+  rowLabel.textContent=row.label;
+  el('rect',{[row.unavailable]:'true',x:left,y:row.top,width:width-left-right,height:row.bottom-row.top,fill:`url(#${row.layer}-unavailable)`});
+  for(const block of forecast?.[row.key]||[]){
    const beginning=Math.max(t0,block.start),ending=Math.min(t1,block.end);
-   if(ending<=beginning||block.percent===null)continue;
-   const colour=block.percent<=limits.clear_max_percent?'#e5e7eb':block.percent<=limits.light_max_percent?'#b8bec8':block.percent<=limits.medium_max_percent?'#858e9d':'#4b5563';
-   const rect=el('rect',{'data-cloud-cover':block.percent,x:x(beginning),y:cloudTop,width:x(ending)-x(beginning),height:cloudBottom-cloudTop,fill:colour,stroke:'#606873','stroke-width':0.5});
-   const title=el('title',{},rect);title.textContent=`${timeFormat.format(block.start)}–${timeFormat.format(block.end)} · Cloud cover ${block.percent}%`;
+   if(ending<=beginning||!Number.isFinite(block.percent))continue;
+   const colour=conditionColour(block.percent);
+   const rect=el('rect',{[row.attribute]:block.percent,x:x(beginning),y:row.top,width:x(ending)-x(beginning),height:row.bottom-row.top,fill:colour,stroke:'#606873','stroke-width':0.5});
+   const title=el('title',{},rect);title.textContent=weatherText(row,block);
+   const percentage=`${Math.round(block.percent)}%`,blockWidth=x(ending)-x(beginning);
+   const label=el('text',{x:(x(beginning)+x(ending))/2,y:(row.top+row.bottom)/2,'text-anchor':'middle','dominant-baseline':'central','pointer-events':'none'});
+   label.style.fill='#111827';
+   label.style.fontSize=Math.min(11,Math.max(1,(blockWidth-2)/(percentage.length*.65)))+'px';
+   label.textContent=percentage;
   }
-  const cloudLabel=el('text',{x:left+4,y:cloudTop+13,fill:'white','pointer-events':'none'});
-  cloudLabel.style.fill='#ffffff';cloudLabel.style.paintOrder='stroke';cloudLabel.style.stroke='#333';cloudLabel.style.strokeWidth='2px';cloudLabel.textContent='Cloud cover';
-  cloudInfo.textContent=forecast?.error||'Hourly total cloud cover: light = clearer · dark = cloudier · hatched = unavailable';
-  if(forecast?.retrieved_at)cloudInfo.textContent+=` · Retrieved ${new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(forecast.retrieved_at))}`;
-  const credit=document.createElement('a');credit.href='https://open-meteo.com/';credit.target='_blank';credit.rel='noopener noreferrer';credit.textContent=' · Forecast: Open-Meteo';cloudInfo.append(credit);
  }
  for(let a=minY;a<=maxY;a+=10){el('line',{x1:left,x2:width-right,y1:y(a),y2:y(a),class:'grid'});text(a,{x:left-8,y:y(a)+4,'text-anchor':'end'});}
  const ticks=Math.max(2,Math.min(6,Math.floor((width-left-right)/75)));
- for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:335,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
- text(`Time (${data.timezone})`,{x:(left+width-right)/2,y:359,'text-anchor':'middle'});
- const label=text('Altitude (°)',{x:12,y:(plotTop+bottom)/2,'text-anchor':'middle'});label.setAttribute('transform',`rotate(-90 12 ${(plotTop+bottom)/2})`);
+ for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:357,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
  if(visible('minimum'))el('line',{x1:left,x2:width-right,y1:y(data.minimum),y2:y(data.minimum),stroke:'#e69520','stroke-width':2,'stroke-dasharray':'2 4'});
  if(data.horizon&&visible('horizon'))path(data.horizon,'#c44e52');
  if(visible('object'))path(data.alt,'#4c9be8');
+ if(visible('moonlight'))for(const period of data.moon_interference||[]){
+  const beginning=Math.max(t0,period.start),ending=Math.min(t1,period.end);
+  if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffff00','fill-opacity':0.9,'pointer-events':'none'});
+ }
 
  guide=el('line',{x1:0,x2:0,y1:plotTop,y2:bottom,stroke:'#999','stroke-width':1});
  marker=el('circle',{r:visible('object')?5:0,fill:'#4c9be8',stroke:'white','stroke-width':1.5});
@@ -120,12 +149,30 @@ function show(t){
  guide.setAttribute('x1',x(selectedTime));guide.setAttribute('x2',x(selectedTime));
  document.getElementById('alt').textContent=altitude.toFixed(1)+'°';
  document.getElementById('az').textContent=azimuth.toFixed(1)+'°';
+ const moonDistance=Observation.interpolate(data.moon_distance?.times,data.moon_distance?.separation,selectedTime);
+ const moonAltitude=Observation.interpolate(data.moon_distance?.times,data.moon_distance?.altitudes,selectedTime);
+ const moonIllumination=Observation.interpolate(data.moon_distance?.times,data.moon_distance?.illumination,selectedTime);
+ document.getElementById('moon-illumination').textContent=moonIllumination===null?'—':moonIllumination.toFixed(0)+'%';
+ const moonReadout=document.getElementById('moon-distance');
+ moonReadout.textContent=moonDistance===null?'—':moonDistance.toFixed(1)+'°';
+ moonReadout.title=moonDistance===null?'Angle to moon unavailable':`Angular separation from the target${moonAltitude!==null&&moonAltitude<=0?' · Moon below the horizon':''}`;
+ const phaseAngles=data.moon_distance?.phase_angles;
+ let unwrapped=[];
+ for(const value of phaseAngles||[]){const previous=unwrapped.at(-1);unwrapped.push(previous===undefined?value:previous+((value-previous+540)%360)-180);}
+ const phaseAngle=Observation.interpolate(data.moon_distance?.times,unwrapped,selectedTime);
+ const phase=Observation.moonPhase(phaseAngle);
+ const icon=document.getElementById('moon-phase');icon.textContent=phase.icon;icon.title=phase.name;icon.setAttribute('aria-label',phase.name);
+ document.getElementById('moon-phase-name').textContent=phase.name;
+ const rating=Observation.moonRating(moonDistance,moonAltitude,moonIllumination,data.moon_interference,selectedTime,data.moon_distance?.enabled);
+ const ratingElement=document.getElementById('moon-rating');ratingElement.textContent=rating;
+ ratingElement.title='Estimated broadband moonlight impact from the configured illumination, separation and Moon-altitude rules. Not a measured loss of image quality.';
+ ratingElement.style.color=rating==='Low impact'?'#22c55e':rating==='Moderate impact'?'#f59e0b':rating==='High impact'?'#ef4444':'inherit';
  document.getElementById('datetime').textContent=timeFormat.format(selectedTime);
 }
 function renderInterval(pointerTime=null){
  intervalGroup.replaceChildren();
  boundaries.forEach((t,i)=>{
-  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:visible('clouds')?cloudBottom:bottom,stroke:'#bc80ee','stroke-width':2},intervalGroup);
+  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:weatherBottom(),stroke:'#bc80ee','stroke-width':2},intervalGroup);
   const label=el('text',{x:Math.min(width-right-32,Math.max(left+3,x(t)+4)),y:plotTop+12+i*14},intervalGroup);
   label.textContent=timeFormat.format(t);
  });
@@ -145,16 +192,21 @@ svg.addEventListener('click',event=>{
 document.getElementById('clear-interval').addEventListener('click',()=>{boundaries=[];saveInterval();renderInterval();});
 svg.addEventListener('pointermove',event=>{
  const bounds=svg.getBoundingClientRect(),px=event.clientX-bounds.left,py=event.clientY-bounds.top;
- if(px<left||px>width-right||py<plotTop||py>(visible('clouds')?cloudBottom:bottom)){document.getElementById('tip').style.display='none';return;}
- if(visible('clouds')&&py>=cloudTop&&py<=cloudBottom){
-  const t=t0+(px-left)/(width-left-right)*(t1-t0),block=(data.cloud_forecast?.segments||[]).find(b=>t>=b.start&&t<b.end);
-  const tip=document.getElementById('tip');tip.textContent=block&&block.percent!==null?`${timeFormat.format(block.start)}–${timeFormat.format(block.end)} · Cloud cover ${block.percent}%`:'Cloud forecast unavailable';
-  tip.style.display='block';tip.style.left=Math.min(width-260,px+12)+'px';tip.style.top=(py-30)+'px';return;
+ if(px<left||px>width-right||py<plotTop||py>weatherBottom()){document.getElementById('tip').style.display='none';return;}
+ const row=weatherRows.find(row=>visible(row.layer)&&py>=row.top&&py<=row.bottom);
+ if(row){
+  const t=t0+(px-left)/(width-left-right)*(t1-t0),block=(data.cloud_forecast?.[row.key]||[]).find(b=>t>=b.start&&t<b.end);
+  const tip=document.getElementById('tip');tip.textContent=block&&Number.isFinite(block.percent)?weatherText(row,block):`${row.description} forecast unavailable`;
+  tip.style.display='block';tip.style.left=Math.max(0,Math.min(width-260,px+12))+'px';tip.style.top=(py-30)+'px';return;
  }
+ if(py>bottom){document.getElementById('tip').style.display='none';return;}
  show(t0+(px-left)/(width-left-right)*(t1-t0));
  if(boundaries.length===1)renderInterval(selectedTime);
- const tip=document.getElementById('tip');tip.textContent=timeFormat.format(selectedTime);tip.style.display='block';
- tip.style.left=Math.min(width-65,px+12)+'px';tip.style.top=Math.max(0,py-30)+'px';
+ const tip=document.getElementById('tip');
+ const twilight=(data.astronomical_twilight||[]).find(p=>selectedTime>=p[0]&&selectedTime<=p[1]);
+ const night=(data.astronomical_night||[]).find(p=>selectedTime>=p[0]&&selectedTime<=p[1]);
+ tip.textContent=twilight?`Astronomical twilight: ${timeFormat.format(twilight[0])}–${timeFormat.format(twilight[1])}`:night?`Astronomical night: ${timeFormat.format(night[0])}–${timeFormat.format(night[1])}`:timeFormat.format(selectedTime);tip.style.display='block';
+ tip.style.left=Math.max(0,Math.min(width-tip.offsetWidth-4,px+12))+'px';tip.style.top=Math.max(0,py-30)+'px';
 });
 svg.addEventListener('pointerleave',()=>{document.getElementById('tip').style.display='none';});
 for(const name of layerNames){document.getElementById('show-'+name).onchange=()=>{

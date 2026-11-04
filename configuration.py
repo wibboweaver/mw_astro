@@ -18,7 +18,7 @@ IMAGE_FIELDS = ('Fit target', '0.5°', '1°', '2°', '5°')
 SECTIONS = {
     'observatory': ('latitude_deg', 'longitude_deg', 'height_m', 'timezone', 'horizon_file'),
     'chart': ('evening_date', 'start_hour', 'start_minute', 'exposure_seconds', 'minimum_altitude_deg', 'duration_hours', 'step_minutes', 'visibility_mode'),
-    'targets': ('target_source', 'catalogue_scope', 'catalogue_file'),
+    'targets': ('target_source', 'catalogue_scope', 'catalogue_file', 'max_objects', 'min_frame_coverage_percent'),
     'preview': ('show_preview', 'image_field'),
     'equipment': ('focal_length_mm', 'sensor_width_mm', 'sensor_height_mm', 'frame_rotation_deg', 'camera_width_px', 'camera_height_px'),
 }
@@ -42,6 +42,8 @@ class Settings:
     target_source: str = 'Automatic catalogue'
     catalogue_scope: str = 'Named and Messier objects'
     catalogue_file: str = 'targets.csv'
+    max_objects: int = 100
+    min_frame_coverage_percent: float = 15.0
     show_preview: bool = True
     image_field: str = 'Fit target'
     focal_length_mm: float = 550.0
@@ -57,13 +59,15 @@ class Settings:
             ('sensor_height_mm', 0.1, 100), ('frame_rotation_deg', 0, 360),
             ('latitude_deg', -90, 90), ('longitude_deg', -180, 180),
             ('height_m', -500, 10000), ('duration_hours', 0.1, 48),
-            ('step_minutes', 1, 60), ('exposure_seconds', 0.1, 86400), ('minimum_altitude_deg', 0, 90),
+            ('min_frame_coverage_percent', 0.1, 100), ('step_minutes', 1, 60), ('exposure_seconds', 0.1, 86400), ('minimum_altitude_deg', 0, 90),
         ):
             value = getattr(self, name)
             if value is None and name in ('latitude_deg', 'longitude_deg'):
                 continue
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not lower <= value <= upper:
                 raise ValueError(f'Invalid {name}: expected {lower} to {upper}.')
+        if type(self.max_objects) is not int or self.max_objects < 1:
+            raise ValueError('max_objects must be a positive integer.')
         for name in ('camera_width_px', 'camera_height_px'):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= 100000:
