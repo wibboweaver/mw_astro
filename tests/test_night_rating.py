@@ -115,3 +115,15 @@ def test_score_and_explanation_are_independent_of_weather(weather):
     assert actual['score']==baseline['score']
     assert actual['reason']==baseline['reason']
     assert 'cloud' not in actual['reason'].lower()
+
+
+@pytest.mark.parametrize('score', [None, 0, 87, 100])
+def test_rating_digits_remain_legible_inside_the_circle(score):
+    from io import BytesIO
+    from PIL import Image
+    from night_rating import rating_image
+    image = Image.open(BytesIO(rating_image(score)))
+    # This rectangle is inside the ring, so only the text contributes pixels.
+    bounds = image.crop((32, 60, 144, 116)).getchannel('A').getbbox()
+    assert bounds is not None
+    assert bounds[3] - bounds[1] >= 35

@@ -121,8 +121,9 @@ def rating_image(score):
     image=Image.new('RGBA',(176,176),(0,0,0,0));draw=ImageDraw.Draw(image)
     draw.ellipse((16,16,160,160),outline='#666666',width=12)
     if score is not None and score>0:draw.arc((16,16,160,160),-90,-90+score*3.6,fill=colour,width=12)
-    try:font=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf',48)
-    except OSError:font=ImageFont.load_default()
+    # Use Pillow's bundled scalable font so every platform has legible digits.
+    # Render at twice the display resolution: 64 px becomes 32 px in the gauge.
+    font=ImageFont.load_default(size=64)
     draw.text((88,88),'?' if score is None else str(score),font=font,fill=colour,anchor='mm')
     out=BytesIO();image.save(out,format='PNG');return out.getvalue()
 

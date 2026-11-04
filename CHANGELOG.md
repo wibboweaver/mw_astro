@@ -2,6 +2,7 @@
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-04 | alpha | Enlarged rating-circle digits in the app and reports and used a bundled scalable font for consistent rendering across platforms. |
 | 2026-11-04 | alpha | Corrected Moon phase labels around principal events and widened report Status columns while retaining overall table width. |
 | 2026-11-04 | alpha | Added configurable Night ratings based on continuous astronomical-night visibility, Moon interference and uncropped frame coverage; cloud cover and rain risk are independent of the score. |
 | 2026-11-04 | alpha | Sorted targets by descending Night rating, followed by targets with missing assessment data and then zero-rated targets; retained target selection when ordering changes. |
