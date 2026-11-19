@@ -1,4 +1,5 @@
 """Offline imaging-session calculations for the Markdown planning report."""
+from earth_rotation import planning_earth_rotation
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -263,7 +264,6 @@ def evaluate(plan, target, settings, rules, profile=None):
     import astropy.units as u
     from astropy.coordinates import EarthLocation, AltAz, SkyCoord, get_sun, get_body
     from astropy.time import Time
-    from astropy.utils import iers
     from altitude import calculate_altitudes
     from horizon import horizon_altitudes
     from target_table import next_transits
@@ -273,7 +273,7 @@ def evaluate(plan, target, settings, rules, profile=None):
     times, alt, az = calculate_altitudes(target.ra_deg,target.dec_deg,settings.latitude_deg,settings.longitude_deg,settings.height_m,plan.start,plan.seconds/3600,rules['visibility']['sample_interval_minutes'],include_azimuth=True)
     site = EarthLocation.from_geodetic(settings.longitude_deg*u.deg,settings.latitude_deg*u.deg,settings.height_m*u.m)
     epochs = Time(times)
-    with iers.conf.set_temp('auto_download',False):
+    with planning_earth_rotation():
         horizontal = AltAz(obstime=epochs,location=site,pressure=0*u.hPa)
         sun = get_sun(epochs)
         moon = get_body('moon',epochs,site)
@@ -375,13 +375,12 @@ def evaluate_checklist(plan, target, settings, rules, profile=None, moon_data=No
     import astropy.units as u
     from astropy.coordinates import EarthLocation, AltAz, get_sun
     from astropy.time import Time
-    from astropy.utils import iers
     from altitude import calculate_altitudes
     from horizon import horizon_altitudes
     from target_table import next_transits
     times,alt,az=calculate_altitudes(target.ra_deg,target.dec_deg,settings.latitude_deg,settings.longitude_deg,settings.height_m,plan.start,plan.seconds/3600,rules['visibility']['sample_interval_minutes'],include_azimuth=True)
     site=EarthLocation.from_geodetic(settings.longitude_deg*u.deg,settings.latitude_deg*u.deg,settings.height_m*u.m)
-    with iers.conf.set_temp('auto_download',False):
+    with planning_earth_rotation():
         sun=get_sun(Time(times)).transform_to(AltAz(obstime=Time(times),location=site,pressure=0*u.hPa)).alt.deg
     exposures=math.floor(math.floor(plan.seconds+0.5)/plan.exposure_seconds)
     report=checklist_report(plan,rules,settings.minimum_altitude_deg,alt,horizon_altitudes(profile,az) if profile is not None else np.zeros(len(alt)),sun,exposures,sample_seconds=[(t-times[0]).total_seconds() for t in times])

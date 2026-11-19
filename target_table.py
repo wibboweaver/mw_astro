@@ -1,4 +1,5 @@
 """Catalogue details and next upper meridian transits for the visible list."""
+from earth_rotation import planning_earth_rotation
 import csv
 from functools import lru_cache
 from datetime import timedelta, timezone as utc_timezone
@@ -9,10 +10,9 @@ import pandas as pd
 import astropy.units as u
 from astropy.coordinates import SkyCoord, TETE
 from astropy.time import Time
-from astropy.utils import iers
 
 from catalogue import DATA_DIR
-import filter_recommendations
+from capture_guidance import capture_guidance
 from object_sizes import normalise_id, object_size_label, frame_metrics
 
 TYPE_NAMES = {
@@ -48,7 +48,7 @@ def next_transits(targets, start, longitude):
     coords = SkyCoord([t.ra_deg for t in targets] * u.deg,
                       [t.dec_deg for t in targets] * u.deg, frame='icrs')
     sidereal_day = 86164.0905
-    with iers.conf.set_temp('auto_download', False):
+    with planning_earth_rotation():
         epoch = Time(start)
         ra = coords.transform_to(TETE(obstime=epoch)).ra.deg
         lst = epoch.sidereal_time('apparent', longitude=longitude * u.deg).deg
@@ -87,7 +87,7 @@ def target_table(targets, start, longitude, timezone, windows=None, camera_field
             'Frame coverage': footprint['coverage'],
             'Object pixels': footprint['pixels'],
             'Window': window_label(windows.get(target.common_name) if windows is not None else None),
-            'Filter?': 'yes' if filter_recommendations.recommend_dualband(target.object_id)[0] else 'no',
+            'Capture': capture_guidance(target.object_id).mode,
             'Size': object_size_label(target.object_id),
             'Classification': classification,
             'Distance': 'Unavailable',

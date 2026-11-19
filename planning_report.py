@@ -1,6 +1,6 @@
 """Human-readable N.I.N.A. handover and observation assessment; no equipment control."""
 from datetime import datetime
-from filter_recommendations import recommend_dualband, catalogue_types, BROADBAND_TYPES
+from capture_guidance import capture_guidance, guidance_markdown
 from object_sizes import normalise_id, frame_metrics
 from framing import field_of_view
 from cloud_forecast import summarise_cloud_window
@@ -24,8 +24,9 @@ def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre
     frame_coord=SkyCoord(*(frame_centre or (target.ra_deg,target.dec_deg)),unit='deg')
     frame_ra=frame_coord.ra.to_string(unit=u.hourangle,sep=':',precision=1,pad=True)
     frame_dec=frame_coord.dec.to_string(unit=u.deg,sep=':',precision=0,pad=True,alwayssign=True)
-    filter_yes,_=recommend_dualband(target.object_id)
-    filter_label='Dualband Filter' if filter_yes else 'No filter' if catalogue_types().get(normalise_id(target.object_id)) in BROADBAND_TYPES else 'Unknown — object classification is inconclusive'
+    advice = capture_guidance(target.object_id)
+    filter_label = {'Broadband': 'No filter', 'Dual-band': 'Dualband Filter',
+                    'Both': 'DB2 plus separate broadband exposures'}.get(advice.mode, 'Unknown — object classification is inconclusive')
     footprint=frame_metrics(target.object_id,field_of_view(settings.focal_length_mm,settings.sensor_width_mm,settings.sensor_height_mm),(settings.camera_width_px,settings.camera_height_px),settings.min_frame_coverage_percent)
     rows=[('Target',f'{target.common_name} — {target.object_id}'),('Catalogue centre (J2000)',f'RA {ra} · Dec {dec}'),
           ('Frame centre (J2000)',f'RA {frame_ra} · Dec {frame_dec}'),
@@ -33,7 +34,7 @@ def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre
           ('Capture starts',plan.start.strftime('%d %B %Y, %H:%M %Z (%z)')),('Capture ends',plan.end.strftime('%d %B %Y, %H:%M %Z (%z)')),
           ('Timezone',settings.timezone),('Exposure',f'{plan.exposure_seconds:g} seconds'),('Available duration',duration(plan.seconds)),
           ('Maximum exposures (before overheads)',str(assessment.exposures)),
-          ('Filter recommendation',filter_label)]
+          ('Filter recommendation',filter_label), ('Capture approach',advice.mode)]
     lines=[f'# Imaging Plan — {clean(target.common_name)}','']
     from night_rating import rating_gauge
     score=(night_rating or {}).get('score')
@@ -45,6 +46,11 @@ def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre
         lines += [f'Rated window: {first:%d %b %Y %H:%M}–{last:%d %b %Y %H:%M %Z}. This is the object’s best rated window within the chart range; it may differ from the selected capture interval.','']
     lines += ['## Capture Information (NINA)','','| Setting | Planned value |','|---|---|']
     lines += [f'| {key} | {clean(value)} |' for key,value in rows]
+    lines += ['', guidance_markdown(target.object_id, heading='##'), '']
+    from earth_rotation import data_notice
+    notice = data_notice(plan.start, plan.end)
+    if notice:
+        lines += ['', '**Astronomy data:** '+notice, '']
     criteria=[]
     high={'Limited observation duration','Start altitude','End altitude','Start horizon','End horizon','Start night','End night','Cloud cover','Precipitation','Wind and dew','Sky conditions across window'}
     low={'Start timing'}

@@ -6,6 +6,7 @@ from pathlib import Path
 import hashlib
 import json
 import importlib
+import earth_rotation
 import cloud_forecast, night_rating
 for source_module in (cloud_forecast,night_rating):
     if getattr(source_module,'_loaded_source_stamp',None)!=Path(source_module.__file__).stat().st_mtime_ns:
@@ -18,6 +19,8 @@ import importlib
 import object_sizes
 if getattr(object_sizes, '_loaded_source_stamp', None) != Path(object_sizes.__file__).stat().st_mtime_ns:
     importlib.reload(object_sizes)
+import capture_guidance as capture_guidance_module
+importlib.reload(capture_guidance_module)
 import target_table as target_table_module
 if getattr(target_table_module, '_loaded_source_stamp', None) != Path(target_table_module.__file__).stat().st_mtime_ns:
     importlib.reload(target_table_module)
@@ -83,7 +86,7 @@ def cached_night(evening_date, zone_name, chart_start, chart_end, latitude, long
 
 
 @st.cache_data(show_spinner=False, max_entries=12)
-def cached_target_table(targets, start, longitude, timezone, windows=None, camera_field=None, camera_pixels=None, ratings=None):
+def cached_target_table(targets, start, longitude, timezone, windows=None, camera_field=None, camera_pixels=None, ratings=None, guidance_version=None):
     # Target table contains object ratings and geometry; weather stays on the chart and report.
     return target_table(targets, start, longitude, timezone, windows, camera_field, camera_pixels, ratings)
 
@@ -255,6 +258,19 @@ if not catalogue:
     st.warning("No target catalogue is supplied yet. Add up to 100 verified common names and SIMBAD IDs to targets.csv, or upload a CSV in the sidebar. See TARGETS.md for the format.")
     st.stop()
 
+notice = earth_rotation.data_notice(start, start + timedelta(hours=duration_hours))
+if notice:
+    st.warning(notice)
+with st.expander('Earth-rotation data', expanded=False):
+    st.caption('Local IERS data support altitude, Moon and transit estimates. Refresh requires an internet connection.')
+    if st.button('Refresh Earth-rotation data', key='refresh_earth_rotation'):
+        refreshed, message = earth_rotation.refresh_data()
+        if refreshed:
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.warning(message)
+
 with st.spinner("Loading target coordinates…"):
     targets, failures = (catalogue, ()) if target_source == "Automatic catalogue" else cached_coordinates(catalogue)
 if failures:
@@ -316,12 +332,12 @@ usable_count=sum(value['start'] is not None for value in ratings.values())
 st.caption(f'{usable_count} listed targets have an observable astronomical-night window above the minimum altitude and local horizon. '
     'Target visibility filters the full chart period, which can also include daylight and twilight. '
     'Rated targets appear first, followed by targets awaiting assessment, then targets with no usable dark window.')
-display_table=cached_target_table(visible_targets, start, longitude, settings.timezone, windows, (fov_width, fov_height), (camera_width, camera_height), ratings).copy()
+display_table=cached_target_table(visible_targets, start, longitude, settings.timezone, windows, (fov_width, fov_height), (camera_width, camera_height), ratings, Path(capture_guidance_module.__file__).stat().st_mtime_ns).copy()
 selection = st.dataframe(display_table,
     column_config={'Distance':None,
         'Night rating':st.column_config.ProgressColumn('Night rating',width=112,min_value=0,max_value=100,format='%d',color='auto',help='Preference score, not success probability. Best continuous dark window; Configurable weights: visibility 30, Moon 15, frame 25 by default. Independent of cloud cover and rain risk. Full frame credit at preferred coverage; undersized targets have a configurable score cap. Missing values display Missing data; select the target to see the explanation.'),
         'Rating notes':None,
-        'Filter?':st.column_config.TextColumn('Filter?',help='Dualband Filter recommendation: yes for emission-line targets; no means not recommended or classification unknown.'),
+        'Capture':st.column_config.TextColumn('Capture',help='Broadband, Dual-band, Both, or Needs assessment. Select a target for the reason, emission-line evidence and DB2 guidance.'),
         'Object pixels':st.column_config.TextColumn('Object pixels',help='Estimated major × minor pixel footprint on the full uncropped sensor, with long axes aligned; not resolved detail.'),
         'Frame coverage':st.column_config.TextColumn('Frame coverage',help='Approximate object major × minor dimensions as percentages of the camera long × short field, with long sides aligned. Above 100% extends beyond that edge. Independent of camera rotation; catalogue sizes are approximate. — means an unknown dimension.'),
         'Window':st.column_config.TextColumn('Window',alignment='left',help='Duration as hours° minutes′. Total time in the chart range above the minimum altitude and local horizon during astronomical night. Estimated from sampled trajectories.')},
@@ -364,6 +380,9 @@ def cached_twilight(first,last,latitude,longitude,height):
 twilight_periods=cached_twilight(frame['Time'].iloc[0].to_pydatetime(),frame['Time'].iloc[-1].to_pydatetime(),latitude,longitude,height)
 night_description = night_text(night_periods, date, settings.timezone)
 st.subheader(selected)
+st.markdown(capture_guidance_module.guidance_markdown(target.object_id))
+with st.expander('Capture guidance sources', expanded=False):
+    st.caption(capture_guidance_module.guidance_sources(target.object_id))
 st.caption("Chart shows object altitude over time")
 import planning_ui, planning_report
 for report_module in (planning_report,planning_ui):

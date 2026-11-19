@@ -5,14 +5,14 @@ import numpy as np
 import pytest
 from astropy.time import Time
 import astropy.units as u
-from astropy.utils import iers
+from earth_rotation import planning_earth_rotation
 
 from altitude import calculate_altitudes
 
 
 def test_equatorial_target_transits_near_zenith():
     start = datetime(2026, 10, 21, 0, tzinfo=timezone.utc)
-    with iers.conf.set_temp("auto_download", False):
+    with planning_earth_rotation():
         ra = Time(start).sidereal_time("mean", longitude=0 * u.deg).deg
     _, altitudes = calculate_altitudes(ra, 0, 0, 0, 0, start, 12, 60)
     assert altitudes[0] > 89

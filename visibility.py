@@ -1,11 +1,11 @@
 """Batch target tracks and simultaneous altitude/horizon visibility filtering."""
+from earth_rotation import planning_earth_rotation
 from datetime import timedelta, timezone
 import numpy as np
 import pandas as pd
 import astropy.units as u
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
-from astropy.utils import iers
 from horizon import horizon_altitudes
 
 MODES = ('During window', 'At start', 'Throughout window')
@@ -23,7 +23,7 @@ def calculate_tracks(targets, latitude, longitude, height, start, duration_hours
     coords = SkyCoord(np.array([t.ra_deg for t in targets])[:, None] * u.deg,
                       np.array([t.dec_deg for t in targets])[:, None] * u.deg, frame='icrs')
     site = EarthLocation.from_geodetic(longitude * u.deg, latitude * u.deg, height * u.m)
-    with iers.conf.set_temp('auto_download', False):
+    with planning_earth_rotation():
         horizontal = coords.transform_to(AltAz(obstime=Time(times)[None, :], location=site, pressure=0 * u.hPa))
     return {t.common_name: pd.DataFrame({'Time': times, 'Altitude (°)': horizontal.alt.deg[i],
                                        'Azimuth (°)': horizontal.az.deg[i]}) for i, t in enumerate(targets)}

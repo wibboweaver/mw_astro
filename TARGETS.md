@@ -87,10 +87,10 @@ Selected lines are retained in browser session storage for the same target
 and chart time range, so adjusting exposure immediately updates the count.
 Changing target or the chart's date/time range starts a separate interval.
 
-The Filter? column immediately after Window shows yes for the Dualband Filter on OpenNGC emission-line types EmN, HII, PN and SNR,
-and no for broadband objects and ambiguous/unknown classifications. This is a conservative type-based recommendation, not a claim
-that the filter is installed. Generic Neb or Cl+N types are insufficient for
-an automatic recommendation; reflection and emission components can differ.
+The Capture column immediately after Window distinguishes Broadband, Dual-band,
+Both and Needs assessment. It combines source-backed target profiles with
+conservative OpenNGC type guidance. Select a target for the basis and limitations.
+A recommendation is not confirmation that a filter is installed.
 Manufacturer guidance: https://www.zwoastro.com/product/duo-band-filters/
 
 ## Astronomical night
@@ -201,3 +201,35 @@ when known or a neutral question-mark ring when not assessed. This is the
 object's best observable-window score, not a recalculated score for the chosen
 capture interval. The rated window is labelled explicitly. Re-generate reports
 after changing the selected capture times to update their weather assessments.
+
+
+## Capture type and emission guidance
+
+The Capture column distinguishes Broadband, Dual-band, Both and Needs assessment.
+Select an object for four short answers: capture type, combining datasets,
+emission strengths and whether synthetic S II is useful. Sources are in a separate
+collapsed panel. The same concise guidance is included
+in exported plans. Target-specific profiles currently cover IC 434 / Barnard 33,
+NGC 2023, M16 / NGC 6611 and the principal Veil components NGC 6960/6992/6995.
+Other targets use conservative OpenNGC type guidance, explicitly labelled as such.
+Unknown line presence is not absence. No quantitative flux ratios are inferred
+from object class, survey colours or stretched images. Source links accompany
+profiles; quantitative ratios need a defined aperture and calibrated measurements.
+
+The DB2 supplies Hα/O III estimates, not a separate S II channel. Synthetic
+SHO formulas are labelled aesthetic examples, never measurements of sulphur.
+Genuine SHO requires additional S II capture with additional compatible equipment.
+Broadband versus narrowband is separate from choosing sub-exposure length.
+
+
+## Earth-rotation data
+
+Astronomy calculations share a local IERS table, retaining refreshed data for
+the running process. Offline planning tolerates stale predictions with a visible
+warning; dates outside table coverage also produce a reduced-accuracy notice.
+These notices appear in exported plans. This is planning guidance, not precision
+pointing. Expand Earth-rotation data and click Refresh Earth-rotation data when
+online to request current data from Astropy's official sources. A failed refresh
+retains local data. Refresh clears computed chart caches; unrelated settings and
+image files are unchanged. Restarting can require another refresh if only the
+older bundled table is selected, though Astropy can reuse its download cache.

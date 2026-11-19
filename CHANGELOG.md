@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-18
+
+- Shorten capture guidance to four target-specific answers: capture, combine,
+  emissions and synthetic S II. Keep sources separate and omit unnecessary
+  synthetic-SHO instructions for broadband and Horsehead images.
+
+
+- Prevent expired IERS predictions from crashing offline planning calculations.
+  Use a shared, scoped Earth-rotation data context; warn when data are stale or
+  the selected dates exceed coverage. Add an explicit refresh control and carry
+  accuracy notices into exported plans.
+
+
+- Replace the yes/no filter column with a capture approach: Broadband, Dual-band,
+  Both, or Needs assessment.
+- Add selected-target capture guidance and include it in imaging-plan exports.
+- Distinguish source-backed line presence from missing line-flux ratios; explain
+  DB2 limits, HOO and explicitly synthetic SHO, and additional S II capture.
+
+
 | Date | Version | Changes |
 |---|---|---|
 | 2026-11-04 | alpha | Enlarged rating-circle digits in the app and reports and used a bundled scalable font for consistent rendering across platforms. |

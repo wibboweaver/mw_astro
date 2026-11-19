@@ -207,20 +207,20 @@ def test_save_failure_is_visible_and_chart_still_works():
 
 
 def test_exposure_control_and_filter_recommendation():
-    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,evening_date='2026-10-22')), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('filter_recommendations.recommend_dualband',return_value=(True,'Emission nebula')):
+    with patch('catalogue.load_catalogue',return_value=FIXTURES), patch('configuration.load_settings',return_value=Settings(latitude_deg=52,longitude_deg=-3,evening_date='2026-10-22')), patch('visibility.calculate_tracks',side_effect=fake_tracks), patch('filter_recommendations.catalogue_types',return_value={'TEST1':'EmN','TEST2':'EmN'}):
         app=AppTest.from_file(APP,default_timeout=20).run()
         assert not app.exception
         assert app.sidebar.slider(key='sidebar_exposure').value == 180
         assert not any('filter recommended' in box.label for box in app.checkbox)
-        assert set(app.dataframe[0].value['Filter?'])=={'yes'}
+        assert set(app.dataframe[0].value['Capture'])=={'Dual-band'}
         app.sidebar.slider(key='sidebar_exposure').set_value(240.0).run()
         assert not app.exception
         assert '"exposure_seconds": 240.0' in chart_frames(app)[0].proto.srcdoc
-        with patch('filter_recommendations.recommend_dualband',return_value=(False,'Broadband target')):
+        with patch('filter_recommendations.catalogue_types',return_value={'TEST1':'G','TEST2':'G'}):
             select_target(app, 'Fixture low')
             st.cache_data.clear()
             app.run()
-            assert set(app.dataframe[0].value['Filter?'])=={'no'}
+            assert set(app.dataframe[0].value['Capture'])=={'Broadband'}
 
 
 def test_night_times_remain_without_reference_links_and_survive_image_failure():
@@ -251,7 +251,7 @@ def test_visible_target_table_selects_and_filters():
         assert not any(box.label == 'Target (common name)' for box in app.selectbox)
         assert app.dataframe[0].proto.selection_mode
         assert app.main.subheader[0].value == 'Visible targets'
-        assert list(table.columns) == ['Catalogue ID', 'Common name', 'Night rating', 'Rating notes', 'Transit time', 'Frame coverage', 'Object pixels', 'Window', 'Filter?', 'Size', 'Classification', 'Distance', 'RA (J2000)', 'Dec (J2000)']
+        assert list(table.columns) == ['Catalogue ID', 'Common name', 'Night rating', 'Rating notes', 'Transit time', 'Frame coverage', 'Object pixels', 'Window', 'Capture', 'Size', 'Classification', 'Distance', 'RA (J2000)', 'Dec (J2000)']
         select_target(app, 'Fixture low')
         pd.testing.assert_frame_equal(table, app.dataframe[0].value)
         app.sidebar.slider(key='sidebar_minimum').set_value(60.0).run()
@@ -496,3 +496,16 @@ def test_mixed_rating_values_preserve_native_progress_bars():
         assert pd.isna(app.dataframe[0].value['Night rating'].iloc[1])
         import json
         assert json.loads(app.dataframe[0].proto.columns)['Night rating']['type_config']['type']=='progress'
+
+
+def test_selected_horsehead_shows_capture_guidance_and_missing_ratios():
+    horsehead = (Target('Horsehead', 'IC434', 85.25, -2.45),)
+    with patch('catalogue.load_catalogue', return_value=horsehead), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        assert not app.exception
+        assert list(app.dataframe[0].value['Capture']) == ['Both']
+        text = '\n'.join(element.value for element in app.markdown)
+        assert '**Capture:** Both' in text
+        assert 'no reliable ratio' in text
+        assert '**Combine:**' in text
+        assert '**Simulate S II:** Not needed here' in text

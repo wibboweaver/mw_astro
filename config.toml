@@ -7,12 +7,12 @@ timezone = "Europe/London"         # The observer's timezone.
 horizon_file = "Decking.txt"
 
 [chart]
-start_hour = 17                    # The hour at which the chart begins.
-start_minute = 0                   # The minute at which the chart begins.
+start_hour = 17
+start_minute = 0
 duration_hours = 16.0              # The full duration of the chart window.
 step_minutes = 10                  # The increments for the start time slider.
 minimum_altitude_deg = 50          # The minimum specified object altitude.
-evening_date = "2026-11-04"
+evening_date = "2026-11-19"
 visibility_mode = "During window"  # How objects are selected for the target list.
 exposure_seconds = 300.0           # The length of each image exposure in seconds.
 

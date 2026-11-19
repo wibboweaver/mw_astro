@@ -5,7 +5,7 @@ import astropy.units as u
 import pytest
 from astropy.coordinates import SkyCoord, TETE
 from astropy.time import Time
-from astropy.utils import iers
+from earth_rotation import planning_earth_rotation
 
 from target_table import next_transits, target_table
 from targets import Target
@@ -34,7 +34,7 @@ def test_next_transits_are_upper_meridian_crossings_and_wrap_midnight():
     transits = next_transits(targets, START, -3)
     assert all(0 <= (value - START).total_seconds() < 86165 for value in transits)
     assert any(value.date() > START.date() for value in transits)
-    with iers.conf.set_temp('auto_download', False):
+    with planning_earth_rotation():
         for target, transit in zip(targets, transits):
             epoch = Time(transit)
             ra = SkyCoord(target.ra_deg*u.deg, target.dec_deg*u.deg).transform_to(TETE(obstime=epoch)).ra.deg
@@ -113,8 +113,8 @@ def test_frame_fit_uses_aligned_dimensions_and_handles_unknown_sizes(monkeypatch
 def test_filter_column_order_and_yes_no_values():
     targets=(Target('Ring','M57',283.4,33.0),Target('Andromeda','M31',10.7,41.3),Target('Unknown','CUSTOM',30,-10))
     table=target_table(targets,START,-3,'Europe/London')
-    assert list(table.columns).index('Filter?')==list(table.columns).index('Window')+1
-    assert list(table['Filter?'])==['yes','no','no']
+    assert list(table.columns).index('Capture')==list(table.columns).index('Window')+1
+    assert list(table['Capture'])==['Dual-band','Broadband','Needs assessment']
 
 
 @pytest.mark.parametrize('hours,label',[(None,'—'),(0,'00° 00′'),(1.25,'01° 15′'),(1.999,'02° 00′'),(24,'24° 00′')])

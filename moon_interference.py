@@ -1,4 +1,5 @@
 """Estimated broadband moonlight interference, shared by chart and feedback."""
+from earth_rotation import planning_earth_rotation
 from datetime import datetime, timezone, timedelta
 import numpy as np
 
@@ -57,13 +58,12 @@ def calculate_moonlight(first,last,latitude,longitude,height,ra,dec,step_minutes
     import astropy.units as u
     from astropy.coordinates import EarthLocation, AltAz, SkyCoord, get_body, get_sun, get_body_barycentric, solar_system_ephemeris, GeocentricTrueEcliptic
     from astropy.time import Time
-    from astropy.utils import iers
     first=first.astimezone(timezone.utc);last=last.astimezone(timezone.utc)
     offsets=np.append(np.arange(0,(last-first).total_seconds(),step_minutes*60),(last-first).total_seconds())
     stamps=[first+timedelta(seconds=float(v)) for v in offsets]
     epochs=Time(stamps)
     site=EarthLocation.from_geodetic(longitude*u.deg,latitude*u.deg,height*u.m)
-    with iers.conf.set_temp('auto_download',False),solar_system_ephemeris.set('builtin'):
+    with planning_earth_rotation(),solar_system_ephemeris.set('builtin'):
         moon=get_body('moon',epochs,site)
         alt=moon.transform_to(AltAz(obstime=epochs,location=site,pressure=0*u.hPa)).alt.deg
         target=SkyCoord(ra*u.deg,dec*u.deg).transform_to(moon.frame)

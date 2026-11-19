@@ -1,4 +1,5 @@
 """Preference-based night scores: not a probability of imaging success."""
+from earth_rotation import planning_earth_rotation
 from datetime import datetime,timezone
 import math
 from pathlib import Path
@@ -69,7 +70,6 @@ def all_ratings(targets,tracks,nights,profile,minimum,cloud,settings,moon_rules,
     import astropy.units as u
     from astropy.coordinates import SkyCoord,EarthLocation,get_body
     from astropy.time import Time
-    from astropy.utils import iers
     from framing import field_of_view
     moon_by_name={}
     if targets and moon_rules['enabled'] and nights:
@@ -77,7 +77,7 @@ def all_ratings(targets,tracks,nights,profile,minimum,cloud,settings,moon_rules,
         try:
             data=calculate_moonlight(frame.Time.iloc[0].to_pydatetime(),frame.Time.iloc[-1].to_pydatetime(),settings.latitude_deg,settings.longitude_deg,settings.height_m,reference.ra_deg,reference.dec_deg,settings.step_minutes,moon_rules)
             site=EarthLocation.from_geodetic(settings.longitude_deg*u.deg,settings.latitude_deg*u.deg,settings.height_m*u.m)
-            with iers.conf.set_temp('auto_download',False):
+            with planning_earth_rotation():
                 moon=get_body('moon',Time(np.array(data['times'])/1000,format='unix'),site)
                 coordinates=SkyCoord(np.array([t.ra_deg for t in targets])[:,None]*u.deg,np.array([t.dec_deg for t in targets])[:,None]*u.deg)
                 separations=coordinates.transform_to(moon.frame).separation(moon).deg

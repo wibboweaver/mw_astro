@@ -1,11 +1,11 @@
 """Geometric ICRS target altitude calculations; no UI or network required."""
+from earth_rotation import planning_earth_rotation
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import astropy.units as u
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.time import Time
-from astropy.utils import iers
 
 
 def calculate_altitudes(ra_deg, dec_deg, latitude_deg, longitude_deg, height_m,
@@ -14,7 +14,7 @@ def calculate_altitudes(ra_deg, dec_deg, latitude_deg, longitude_deg, height_m,
 
     Set include_azimuth=True to also return azimuths (north=0°, east=90°).
 
-    The bundled IERS table avoids network access. Atmospheric refraction is
+    The shared local IERS table avoids network access. Atmospheric refraction is
     disabled; results are for planning, not precision pointing.
     """
     if start.tzinfo is None or start.utcoffset() is None:
@@ -34,7 +34,7 @@ def calculate_altitudes(ra_deg, dec_deg, latitude_deg, longitude_deg, height_m,
     timestamps = [start_utc + timedelta(minutes=float(value)) for value in minutes]
     location = EarthLocation.from_geodetic(longitude_deg * u.deg, latitude_deg * u.deg, height_m * u.m)
     target = SkyCoord(ra_deg * u.deg, dec_deg * u.deg, frame="icrs")
-    with iers.conf.set_temp("auto_download", False):
+    with planning_earth_rotation():
         horizontal = target.transform_to(AltAz(obstime=Time(timestamps), location=location, pressure=0 * u.hPa))
     if include_azimuth:
         return timestamps, horizontal.alt.deg, horizontal.az.deg

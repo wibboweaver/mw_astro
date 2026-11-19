@@ -1,4 +1,5 @@
 """Astronomical darkness: geometric solar centre below -18 degrees."""
+from earth_rotation import planning_earth_rotation
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -7,7 +8,6 @@ import numpy as np
 import astropy.units as u
 from astropy.coordinates import AltAz, EarthLocation, get_sun
 from astropy.time import Time
-from astropy.utils import iers
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ class NightInterval:
 def solar_altitudes(times, latitude, longitude, height=0):
     location = EarthLocation.from_geodetic(longitude*u.deg, latitude*u.deg, height*u.m)
     moments = Time(times)
-    with iers.conf.set_temp('auto_download', False):
+    with planning_earth_rotation():
         return get_sun(moments).transform_to(AltAz(obstime=moments, location=location, pressure=0*u.hPa)).alt.deg
 
 

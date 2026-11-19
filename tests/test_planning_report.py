@@ -114,3 +114,14 @@ def test_report_contains_same_circular_rating_and_its_window():
     result=markdown_report(plan,Target('M31','M31',10,40),Settings(latitude_deg=52,longitude_deg=-3),Report([],24,120),night_rating=rating)
     assert 'Night rating: Missing data' in result and 'Missing data — Catalogue dimensions unavailable' in result
     assert 'NIGHT_RATING_START' in result
+
+
+def test_export_retains_mixed_field_and_synthetic_sulphur_limits():
+    start = datetime(2026, 11, 18, 23, tzinfo=timezone.utc)
+    target = Target('Horsehead', 'IC434', 85.25, -2.45)
+    result = markdown_report(Plan('Horsehead', start, start+timedelta(hours=2), 180), target,
+                             Settings(latitude_deg=52, longitude_deg=-3), Report([], 40, 120))
+    assert '| Capture approach | Both |' in result
+    assert '## Capture guidance' in result
+    assert '**Simulate S II:** Not needed here' in result
+    assert 'no reliable ratio' in result
