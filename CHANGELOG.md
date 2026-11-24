@@ -2,6 +2,8 @@
 
 ## 2026-11-24
 
+- Browse FITS folders recursively, with a configurable child-folder depth guard
+  (fits_browser.max_folder_depth, default 3) and relative paths for duplicate names.
 - Add a sortable FITS folder metadata table while preserving the separate
   single-file categorised view, and remove the Original header cards section.
 - Allow a second selected planning target as a comparison trajectory.

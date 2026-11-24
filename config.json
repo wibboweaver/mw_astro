@@ -148,6 +148,10 @@
     "transit_proximity_hours": 2,
     "late_start_score": 0.5
   },
+  "fits_browser": {
+    "max_folder_depth": 3,
+    "_description": "Chosen folder is depth 0; allow three child-folder levels. If any real subfolder exceeds the limit, reject the entire scan before reading FITS metadata. Directory symlinks are skipped."
+  },
   "_notes": [
     "Active application configuration. Sidebar changes update their own scalar fields while preserving all other sections.",
     "session_selection.parameters: mandatory rules have no weight or rating and must pass. Relative rules have normalised weights; zero disables their preference.",

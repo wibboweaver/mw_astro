@@ -1,6 +1,7 @@
 """Read filesystem details and FITS headers without loading image arrays."""
 from datetime import datetime
 from pathlib import Path
+import os
 import subprocess
 
 from astropy.io import fits
@@ -10,13 +11,46 @@ from fits_metadata import metadata_tree_html
 FITS_SUFFIXES = ('.fits', '.fit', '.fts', '.fits.gz', '.fit.gz', '.fts.gz', '.fits.fz', '.fit.fz', '.fts.fz')
 
 
-def list_fits(folder):
-    directory = Path(folder).expanduser()
+def load_max_folder_depth(path=None):
+    from configuration import read_config
+    settings = read_config(path).get('fits_browser', {})
+    if not isinstance(settings, dict):
+        raise ValueError('fits_browser in config.json must be an object.')
+    depth = settings.get('max_folder_depth', 3)
+    if type(depth) is not int or depth < 0:
+        raise ValueError('fits_browser.max_folder_depth must be a nonnegative integer.')
+    return depth
+
+
+def list_fits(folder, max_depth=3):
+    """Collect FITS paths, rejecting the whole tree if any child is too deep.
+
+    The chosen root has depth zero. Directory symlinks are not followed, so
+    aliases cannot escape the chosen tree or create traversal loops.
+    """
+    if type(max_depth) is not int or max_depth < 0:
+        raise ValueError('Maximum folder depth must be a nonnegative integer.')
+    directory = Path(folder).expanduser().resolve()
     if not directory.is_dir():
         raise ValueError('Enter the path to an existing folder.')
-    return sorted((path for path in directory.iterdir()
-                   if path.is_file() and path.name.lower().endswith(FITS_SUFFIXES)),
-                  key=lambda path: (path.name.casefold(), path.name))
+    paths = []
+    pending = [(directory, 0)]
+    while pending:
+        current, depth = pending.pop()
+        with os.scandir(current) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    if depth >= max_depth:
+                        raise ValueError(
+                            f'Folder contains more than {max_depth} levels of child folders '
+                            f'({Path(entry.path).relative_to(directory)}). Choose a lower-level folder '
+                            'or increase fits_browser.max_folder_depth in config.json. '
+                            'No FITS metadata was read.')
+                    pending.append((Path(entry.path), depth + 1))
+                elif entry.name.lower().endswith(FITS_SUFFIXES) and entry.is_file():
+                    paths.append(Path(entry.path))
+    return sorted(paths, key=lambda path: (str(path.relative_to(directory)).casefold(),
+                                           str(path.relative_to(directory))))
 
 
 def file_details(path):
@@ -153,14 +187,18 @@ def render_page():
         st.info('Choose a folder or FITS file using the Browse buttons above.')
         return
     try:
-        paths = list_fits(folder.strip())
+        max_depth = load_max_folder_depth()
+        paths = list_fits(folder.strip(), max_depth)
     except (OSError, ValueError) as exc:
         st.error(f'Cannot read folder: {exc}')
         return
     if not paths:
-        st.info('No FITS files found in this folder. Subfolders are not included.')
+        st.info('No FITS files found in this folder or its child folders.')
         return
-    st.caption(f'{len(paths)} FITS file(s) found. Supports .fits, .fit, .fts, .gz and .fz variants.')
+    root = Path(folder.strip()).expanduser().resolve()
+    st.caption(f'{len(paths)} FITS file(s) found, including child folders. '
+               f'Maximum child-folder depth: {max_depth}. Directory symlinks are skipped. '
+               'Supports .fits, .fit, .fts, .gz and .fz variants.')
     st.subheader('Folder metadata')
     with st.spinner('Reading FITS metadata…'):
         rows = []
@@ -168,14 +206,15 @@ def render_page():
             try:
                 stat = path.stat()
                 signature = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
-                rows.append(cached_row(str(path.resolve()), signature))
+                row = cached_row(str(path.resolve()), signature)
             except OSError as exc:
-                rows.append({'Name': path.name, 'Read error': str(exc)})
+                row = {'Name': path.name, 'Read error': str(exc)}
+            rows.append({'Relative path': path.relative_to(root).as_posix(), **row})
         frame = metadata_frame(rows)
     st.caption('One row per file. Click a column heading to sort; scroll horizontally for more metadata. '
                'Missing fields are blank. Extension headers use an HDU prefix; repeated cards have numbered columns.')
     st.dataframe(frame, hide_index=True, width='stretch')
     if st.session_state.get('fits_selected') not in paths:
         st.session_state.pop('fits_selected', None)
-    selected = st.selectbox('FITS image', paths, format_func=lambda path: path.name, key='fits_selected')
+    selected = st.selectbox('FITS image', paths, format_func=lambda path: path.relative_to(root).as_posix(), key='fits_selected')
     render_file_metadata(selected)

@@ -351,6 +351,12 @@ project is absent, the page displays its expected location; other pages remain u
 
 In the FITS browser, Browse file shows only the selected file's categorised
 metadata. Browse folder shows a sortable table with one row per FITS file in that
-folder, followed by the selected file's categorised details. Subfolders are not
-included. Missing keywords appear blank, extension keywords have an HDU prefix,
+folder and its child folders, followed by the selected file's categorised details.
+The config.json setting fits_browser.max_folder_depth defaults to 3. The chosen
+folder is depth 0: root/child/grandchild/great-grandchild is allowed. If any real
+folder exists below the configured limit, the whole scan is rejected before FITS
+metadata is read, even if that deeper folder is empty or has no FITS files. Set
+the depth to 0 to allow only a folder without child folders. Directory symlinks
+are skipped. Relative paths distinguish files with the same name.
+Missing keywords appear blank, extension keywords have an HDU prefix,
 and unreadable files remain visible with a read error.
