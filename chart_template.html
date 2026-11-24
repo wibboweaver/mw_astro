@@ -200,7 +200,7 @@ function show(t){
 function renderInterval(pointerTime=null){
  intervalGroup.replaceChildren();
  boundaries.forEach((t,i)=>{
-  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:weatherBottom(),stroke:'#bc80ee','stroke-width':2},intervalGroup);
+  el('line',{'data-boundary':i,x1:x(t),x2:x(t),y1:plotTop,y2:bottom-8,stroke:'#bc80ee','stroke-width':2},intervalGroup);
   const label=el('text',{x:Math.min(width-right-32,Math.max(left+3,x(t)+4)),y:plotTop+12+i*14},intervalGroup);
   label.textContent=timeFormat.format(t);
  });

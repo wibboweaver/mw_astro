@@ -139,6 +139,10 @@ assert.equal(JSON.stringify(events.at(-1).points.slice(0,2)),interval);
 assert.equal(get('duration').textContent,duration);assert.equal(get('images').textContent,images);
 const markers=()=>plot.children.find(e=>e.attrs.id==='interval-lines').children.filter(e=>'data-boundary' in e.attrs);
 assert.equal(markers().length,3);resize();assert.equal(markers().length,3);
+assert.ok(markers().every(marker=>marker.attrs.y2===277));
+get('show-precip').checked=false;get('show-precip').onchange();
+get('show-clouds').checked=false;get('show-clouds').onchange();
+assert.ok(markers().every(marker=>marker.attrs.y2===277));
 get('show-object').checked=false;get('show-object').onchange();assert.equal(secondary().length,0);
 get('show-object').checked=true;get('show-object').onchange();assert.equal(secondary().length,1);
 // A rerun preserves all three markers, including the extra visual reference.
