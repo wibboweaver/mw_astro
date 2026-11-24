@@ -81,7 +81,7 @@ def test_recursive_folder_ui_uses_config_and_checks_depth_before_reading_headers
     (child / 'too-deep').mkdir()
     reads = []
     monkeypatch.setattr(fits_browser, 'read_headers', lambda path: reads.append(path))
-    app.button[2].click().run()
+    app.run()
     assert not app.exception
     assert 'more than 1 levels' in app.error[0].value
     assert 'config.json' in app.error[0].value
@@ -146,6 +146,7 @@ def test_browser_shows_folder_table_and_selected_details_without_original_cards(
     app.session_state['fits_folder'] = str(tmp_path)
     app.run()
     assert not app.exception
+    assert [button.label for button in app.button] == ['Browse folder…', 'Browse file…']
     assert len(app.dataframe) == 1
     assert list(app.dataframe[0].value['Name']) == ['a.fits', 'b.fits']
     assert list(app.dataframe[0].value['OBJECT']) == ['a.fits', 'b.fits']
@@ -157,7 +158,7 @@ def test_browser_shows_folder_table_and_selected_details_without_original_cards(
     hdu = fits.PrimaryHDU()
     hdu.header['OBJECT'] = 'changed'
     hdu.writeto(tmp_path / 'b.fits', overwrite=True)
-    app.button[2].click().run()
+    app.run()
     assert not app.exception
     assert app.dataframe[0].value.loc[1, 'OBJECT'] == 'changed'
 
@@ -188,8 +189,9 @@ def test_browse_file_reads_only_selected_file_and_switches_back_to_folder(tmp_pa
     assert app.text_input[0].value == str(second)
     assert [item.value for item in app.subheader] == ['FITS metadata']
 
-    # Refresh and cancelling a picker preserve the single-file view.
-    app.button[2].click().run()
+    assert [button.label for button in app.button] == ['Browse folder…', 'Browse file…']
+    # Reruns and cancelling a picker preserve the single-file view.
+    app.run()
     assert not app.exception
     assert not app.dataframe
     assert all(path == second for path in reads)

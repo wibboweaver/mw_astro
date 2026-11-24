@@ -163,12 +163,10 @@ def render_page():
     st.title('FITS browser')
     st.caption('Browse a file for categorised metadata, or a folder to compare all its FITS files.')
     cached_row = st.cache_data(show_spinner=False)(file_metadata_row)
-    folder_button, file_button, refresh_button = st.columns(3)
-    folder_button.button('Browse folder…', on_click=browse_path, args=('folder',))
-    file_button.button('Browse file…', on_click=browse_path, args=('file',))
+    with st.container(horizontal=True, gap=20):
+        st.button('Browse folder…', on_click=browse_path, args=('folder',))
+        st.button('Browse file…', on_click=browse_path, args=('file',))
     file_mode = st.session_state.get('fits_browse_mode') == 'file'
-    if refresh_button.button('Refresh file' if file_mode else 'Refresh folder'):
-        cached_row.clear()
     if st.session_state.get('fits_picker_error'):
         st.error(st.session_state['fits_picker_error'])
     if file_mode:
