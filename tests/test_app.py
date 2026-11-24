@@ -131,12 +131,6 @@ def esa_payload(app):
                 if 'esa_dss2_preview' in item.proto.component_name)
 
 
-def preview_payloads(element):
-    import json
-    return [json.loads(item.proto.json) for item in element.get('bidi_component')
-            if 'esa_dss2_preview' in item.proto.component_name]
-
-
 def send_preview_state(app, view_key, value):
     import json
     preview = next(item for item in app.get('bidi_component')
@@ -147,53 +141,6 @@ def send_preview_state(app, view_key, value):
     states.widgets.extend(retained)
     states.widgets.add(id=preview.proto.id).json_value = json.dumps(value)
     return app._run(states)
-
-
-def test_two_selected_targets_have_named_image_tabs_and_single_target_has_no_tabs():
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        assert not app.exception and not app.main.tabs
-        select_targets(app, ['Fixture low'])
-        original = esa_payload(app)
-        select_targets(app, ['Fixture low', 'Fixture high'])
-        assert not app.exception
-        assert [tab.label for tab in app.main.tabs] == ['Fixture low', 'Fixture high']
-        assert preview_payloads(app.main.tabs[0]) == [original]
-        assert preview_payloads(app.main.tabs[1])[0]['view_key'] == '20:50'
-        assert len(preview_payloads(app)) == 2
-        assert len(chart_frames(app)) == 1
-        app.run()
-        assert not app.exception
-        assert [tab.label for tab in app.main.tabs] == ['Fixture low', 'Fixture high']
-        select_targets(app, ['Fixture high'])
-        assert not app.exception and not app.main.tabs
-        assert len(preview_payloads(app)) == 1
-        assert esa_payload(app)['view_key'] == '20:50'
-
-
-def test_preview_tabs_keep_independent_centres_and_secondary_rotation_persists():
-    import configuration
-    configuration.save_settings_changes(minimum_altitude_deg=40, show_preview=True)
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('visibility.calculate_tracks', side_effect=fake_tracks):
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture low'])
-        select_targets(app, ['Fixture low', 'Fixture high'])
-        original_chart = chart_payload(app)
-        rotation = configuration.load_settings().frame_rotation_deg
-        primary_centre = dict(view_key='10:40', ra=11, dec=41)
-        comparison_centre = dict(view_key='20:50', ra=21, dec=51)
-        send_preview_state(app, '10:40', dict(rotation=rotation, centre=primary_centre))
-        send_preview_state(app, '20:50', dict(rotation=rotation, centre=comparison_centre))
-        assert not app.exception
-        assert app.session_state['esa_camera_framing']['centre'] == primary_centre
-        assert app.session_state['esa_camera_framing_comparison']['centre'] == comparison_centre
-        send_preview_state(app, '20:50', dict(rotation=97, centre=comparison_centre))
-        assert not app.exception
-        assert configuration.load_settings().frame_rotation_deg == 97
-        assert [payload['rotation'] for payload in preview_payloads(app)] == [97, 97]
-        assert app.session_state['esa_camera_framing']['centre'] == primary_centre
-        assert app.session_state['selected_targets'] == ['Fixture low', 'Fixture high']
-        assert chart_payload(app) == original_chart
 
 
 def test_esa_preview_uses_tiles_without_requesting_cutouts():
@@ -211,12 +158,6 @@ def test_esa_preview_uses_tiles_without_requesting_cutouts():
         assert esa_payload(app)['view_key'] == original['view_key']
         fetch.assert_not_called()
         assert len(chart_frames(app)) == 1
-
-
-
-
-
-
 
 
 def test_sidebar_changes_persist_across_new_sessions(tmp_path, monkeypatch):
@@ -536,7 +477,6 @@ def test_night_rating_order_and_selection_survive_score_changes():
         assert target_names(app)==['Fixture low','Fixture high']
 
 
-
 def test_target_table_excludes_weather_and_preserves_missing_ratings():
     def ratings(targets,*args):
         return {t.common_name:dict(score=None,cloud=None,rain=None,reason='Catalogue dimensions unavailable',start=None,end=None) for t in targets}
@@ -597,87 +537,9 @@ def test_choose_interval_selection_generates_report_without_extra_click():
         assert '| Exposure interval | 240 seconds per exposure |' in app.session_state['imaging_report_markdown']
 
 
-def select_targets(app, names):
-    import json
-    states = app._tree.get_widget_states()
-    table_id = app.dataframe[0].proto.id
-    retained = [state for state in states.widgets if state.id != table_id]
-    del states.widgets[:]
-    states.widgets.extend(retained)
-    state = states.widgets.add(id=table_id)
-    state.string_value = json.dumps({'selection': {'rows': [target_names(app).index(name) for name in names], 'columns': [], 'cells': []}})
-    return app._run(states)
-
-
 def chart_payload(app):
     import json
     return json.JSONDecoder().raw_decode(chart_frames(app)[0].proto.srcdoc.split('const data=')[1])[0]
-
-
-def test_two_selected_targets_keep_primary_reject_third_and_promote_secondary():
-    fixtures = FIXTURES + (Target('Fixture third', 'TEST3', 30, 60),)
-    def tracks(targets, latitude, longitude, height, start, duration, step):
-        altitudes = {'Fixture low': 50, 'Fixture high': 70, 'Fixture third': 60}
-        return {t.common_name: pd.DataFrame({'Time': [pd.Timestamp(start), pd.Timestamp(start)+pd.Timedelta(hours=duration)],
-            'Altitude (°)': [altitudes[t.common_name]]*2, 'Azimuth (°)': [150, 150]}) for t in targets}
-    with patch('catalogue.load_catalogue', return_value=fixtures), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=tracks) as calculate:
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture low'])
-        original = chart_payload(app)
-        original_preview = esa_payload(app)['view_key']
-        # Send table order, not selection order: A must still remain primary.
-        select_targets(app, ['Fixture high', 'Fixture low'])
-        assert not app.exception
-        assert app.session_state['selected_targets'] == ['Fixture low', 'Fixture high']
-        assert app.session_state['selected_target'] == 'Fixture low'
-        paired = chart_payload(app)
-        assert paired['comparison']['name'] == 'Fixture high'
-        assert paired['comparison']['alt'] == [70, 70]
-        assert {k:v for k,v in paired.items() if k != 'comparison'} == {k:v for k,v in original.items() if k != 'comparison'}
-        assert esa_payload(app)['view_key'] == original_preview
-        select_targets(app, ['Fixture high', 'Fixture low', 'Fixture third'])
-        assert not app.exception
-        assert app.session_state['selected_targets'] == ['Fixture low', 'Fixture high']
-        key = next(k for k in app.session_state if k.startswith('target_table:'))
-        rows = app.session_state[key]['selection']['rows']
-        assert {target_names(app)[row] for row in rows} == {'Fixture low', 'Fixture high'}
-        assert chart_payload(app) == paired
-        select_targets(app, ['Fixture high'])
-        assert app.session_state['selected_target'] == 'Fixture high'
-        assert app.session_state['selected_targets'] == ['Fixture high']
-        assert chart_payload(app)['comparison'] is None
-        assert esa_payload(app)['view_key'] != original_preview
-        select_targets(app, [])
-        assert not app.exception
-        assert not chart_frames(app)
-        assert app.session_state['selected_targets'] == []
-        assert calculate.call_count == 1
-
-
-def test_filter_promotes_remaining_comparison_target():
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture low'])
-        select_targets(app, ['Fixture low', 'Fixture high'])
-        app.sidebar.slider(key='sidebar_minimum').set_value(60.0).run()
-        assert not app.exception
-        assert app.session_state['selected_targets'] == ['Fixture high']
-        assert app.session_state['selected_target'] == 'Fixture high'
-        assert chart_payload(app)['comparison'] is None
-        assert chart_payload(app)['interval_revision'] > 0
-
-
-def test_two_target_chart_carries_each_objects_own_size():
-    from object_sizes import format_size
-    sizes = {'TEST1': (60., 30.), 'TEST2': (120., 60.)}
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('object_sizes.catalogue_sizes', return_value=sizes):
-        app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture low'])
-        select_targets(app, ['Fixture low', 'Fixture high'])
-        assert not app.exception
-        payload = chart_payload(app)
-        assert payload['object_size'] == format_size(60., 30.)
-        assert payload['comparison']['object_size'] == format_size(120., 60.)
 
 
 def send_chart_event(app, points=None, clear_objects=False):
@@ -700,47 +562,54 @@ def send_chart_event(app, points=None, clear_objects=False):
 def test_clear_objects_chart_action_unchecks_visible_targets_and_stays_cleared():
     with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
         app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture high', 'Fixture low'])
         revision = chart_payload(app)['interval_revision']
         send_chart_event(app, clear_objects=True)
         assert not app.exception
-        assert app.session_state['selected_targets'] == []
+        assert app.session_state['selected_target'] is None
         table_key = app.session_state['active_target_table_key']
         assert app.session_state[table_key]['selection']['rows'] == []
         assert not chart_frames(app)
         assert app.session_state['chart_interval_revision'] == revision + 1
         app.run()
         assert not app.exception and not chart_frames(app)
-        assert app.session_state['selected_targets'] == []
-        select_targets(app, ['Fixture high'])
+        assert app.session_state['selected_target'] is None
+        select_target(app, 'Fixture high')
         assert not app.exception
         assert chart_payload(app)['interval_revision'] == revision + 1
 
 
-@pytest.mark.parametrize('remaining', ['Fixture high', 'Fixture low'])
-def test_deselecting_either_target_discards_all_timelines_and_old_report(remaining):
+def test_selecting_another_object_replaces_chart_preview_and_old_interval():
     from planning import Report, Check
-    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('planning_ui.evaluate_checklist', return_value=Report([Check('Test', 'Pass', 'Fixture')], 20, 60)) as evaluate:
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('planning_ui.evaluate_checklist', return_value=Report([Check('Test', 'Pass', 'Fixture')], 20, 60)):
         app = AppTest.from_file(APP, default_timeout=20).run()
-        select_targets(app, ['Fixture high', 'Fixture low'])
+        table = app.dataframe[0].proto
+        assert list(table.selection_mode) == [table.SelectionMode.SINGLE_ROW]
         payload = chart_payload(app)
         first = payload['times'][0]
         send_chart_event(app, [first + 3600000, first + 7200000])
-        assert not app.exception
         next(button for button in app.button if button.label == 'Generate report').click().run()
         assert not app.exception
-        report = app.session_state['imaging_report_markdown']
-        plan = evaluate.call_args.args[0]
-        old_chart_id = next(item.proto.id for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name)
-        send_chart_event(app, [first + 3600000, first + 7200000, first + 1800000])
+        assert app.session_state['imaging_report_markdown']
+        select_target(app, 'Fixture low')
         assert not app.exception
-        assert app.session_state['imaging_report_markdown'] == report
-        next(button for button in app.button if button.label == 'Generate report').click().run()
-        assert evaluate.call_args.args[0] == plan
-        select_targets(app, [remaining])
-        assert not app.exception
+        assert app.session_state['selected_target'] == 'Fixture low'
+        assert chart_payload(app)['target_name'] == 'Fixture low'
         assert chart_payload(app)['interval_revision'] == payload['interval_revision'] + 1
-        new_chart_id = next(item.proto.id for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name)
-        assert new_chart_id != old_chart_id
+        assert 'comparison' not in chart_payload(app)
         assert 'imaging_report_markdown' not in app.session_state
         assert any('Missing start and stop times' in item.value for item in app.info)
+        assert esa_payload(app)['view_key'] == '10:40'
+        assert not app.main.tabs
+        assert len([item for item in app.get('bidi_component') if 'esa_dss2_preview' in item.proto.component_name]) == 1
+
+
+def test_single_preview_rotation_still_persists():
+    import configuration
+    configuration.save_settings_changes(minimum_altitude_deg=40, show_preview=True)
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('visibility.calculate_tracks', side_effect=fake_tracks):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        view_key = esa_payload(app)['view_key']
+        send_preview_state(app, view_key, dict(rotation=97))
+        assert not app.exception
+        assert configuration.load_settings().frame_rotation_deg == 97
+        assert esa_payload(app)['rotation'] == 97

@@ -343,26 +343,16 @@ equipment, forecasting and rig values; JSON _description and _notes fields expla
 the selection rules. Legacy TOML import remains supported when an explicit .toml
 file is supplied to a loader. The application reads and writes config.json.
 
-Clear objects, to the right of the chart's layer checkboxes, unchecks the selected
-visible targets and clears all timelines. Clear timelines beside it clears the
-markers while retaining the selected targets. Trajectories, cloud cover and
-precipitation remain visible without individual toggles. With two selected
-targets, three clicks can place three timeline markers. Duration uses HH:MM [HH:MM]
-and image counts use count [count]: the first object's values use timelines 1–2,
-and the bracketed second object's values use timelines 2–3. Object size also
-shows the second target's own size in brackets. Until an interval is complete,
-its value shows an em dash; pointer movement previews its missing endpoint.
-Imaging reports continue to use the first two markers. A further
-click starts a new interval. Deselecting either target, including removal by a
-visibility filter, clears all timeline markers and the previous report. Adding
-a comparison target preserves the existing interval.
+Select one object in Visible targets. Its name appears below the chart, with one
+trajectory, one image preview and unbracketed object size, HH:MM duration and
+image-count readouts. Two timeline markers define the selected interval; another
+click starts a new interval. Pointer movement previews a missing endpoint.
 
-With two targets selected, the image panel has a tab named for each object.
-Switch tabs manually to view either preview; this does not change the primary
-target, chart interval or report. Each preview retains its own framing centre
-and initial field of view. The hidden tab loads its viewer when first opened.
-Camera geometry and rotation remain shared equipment settings. A single selected
-target uses the existing image panel without tabs.
+Clear objects, to the right of the chart's layer checkboxes, unchecks the selected
+object and clears its timelines and report. Clear timelines beside it removes
+the markers while keeping the object selected. Changing or filtering out the
+selected object clears its previous timelines and report. Trajectories, cloud
+cover and precipitation remain visible without individual toggles.
 
 The Image annotator page runs the separate Astro Annotate project from a sibling
 directory named astro-annotate. Its app.py, image_canvas component and own

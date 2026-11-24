@@ -9,12 +9,11 @@ text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
 .cards{display:grid;grid-template-columns:1fr 1fr 1.3fr 3fr;gap:12px;margin:10px 2px 0}
 .card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;min-width:0}
 @media(max-width:650px){.cards{grid-template-columns:1fr 1fr}}
-.size-card .value{font-size:20px;white-space:normal;overflow-wrap:anywhere}
+.size-card .value{font-size:20px}
 .moon-card{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:12px}.moon-phase{font-size:46px;line-height:1;flex:none}.moon-details{font-size:13px;line-height:1.6}.moon-details span{white-space:nowrap}.moon-summary{font-size:13px;line-height:1.6;min-width:0;margin-left:6px}
 @media(max-width:650px){.moon-card{grid-column:1/-1}}
 .label{font-size:14px;margin-bottom:4px}.value{font-size:clamp(16px,3.5vw,25px);white-space:nowrap;font-weight:500}
 .observation{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 2px 0}
-.observation .value{white-space:normal}
 .actions{display:flex;align-items:center;gap:10px;margin:8px 2px;font-size:12px}
 button{background:transparent;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer}
 button:disabled{opacity:.45;cursor:not-allowed}
@@ -24,7 +23,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </style></head><body>
 <svg id="plot" role="img" aria-label="Target altitude and custom horizon versus local time"></svg>
 <div id="tip" role="tooltip"></div>
-<div id="comparison-legend" class="layers" aria-label="Selected targets" hidden></div>
+<div id="target-legend" class="layers" aria-label="Selected target" hidden></div>
 <div class="layers" aria-label="Chart layers">
 <label><input type="checkbox" id="show-horizon" checked> Local horizon</label>
 <label><input type="checkbox" id="show-minimum" checked> Minimum altitude</label>
@@ -56,14 +55,12 @@ const data=__CHART_DATA__;
 const svg=document.getElementById('plot'), ns='http://www.w3.org/2000/svg';
 const timeFormat=new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 document.getElementById('datetime-label').textContent=`Time (${data.timezone})`;
-function pairedValue(primary,comparison){return data.comparison?`${primary} [${comparison}]`:primary;}
-document.getElementById('object-size').textContent=pairedValue(data.object_size,data.comparison?.object_size||'Unavailable');
+document.getElementById('object-size').textContent=data.object_size;
 let selectedTime=data.times[0], width;
 const plotTop=15,bottom=285,left=55,right=15,cloudTop=292,cloudBottom=310,precipTop=cloudBottom+4,precipBottom=precipTop+18;
-const low=Math.min(0,...data.alt,...(data.comparison?.alt||[]),...(data.horizon||[])), high=Math.max(90,...data.alt,...(data.comparison?.alt||[]),data.minimum,...(data.horizon||[]));
+const low=Math.min(0,...data.alt,...(data.horizon||[])), high=Math.max(90,...data.alt,data.minimum,...(data.horizon||[]));
 const minY=Math.floor(low/10)*10,maxY=Math.ceil(high/10)*10;
 const t0=data.times[0], t1=data.times.at(-1);
-const maximumMarkers=data.comparison?3:2;
 const storageKey=`mw-astro-interval:${data.interval_revision}:${data.target_key}:${t0}:${t1}`;
 function clearTimelineStorage(){
  try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key?.startsWith('mw-astro-interval:'))sessionStorage.removeItem(key);}}catch(_){}
@@ -73,20 +70,15 @@ try{
  sessionStorage.setItem('mw-astro-interval-revision',String(data.interval_revision));
 }catch(_){}
 let boundaries=[];
-try{boundaries=Observation.restore(sessionStorage.getItem(storageKey),t0,t1,maximumMarkers);}catch(_){}
-if(data.comparison)document.getElementById('interval-advice').textContent='Click three times: timelines 1–2 for the first object; 2–3 for the second [in brackets].';
+try{boundaries=Observation.restore(sessionStorage.getItem(storageKey),t0,t1);}catch(_){}
 const layerKey='mw-astro-chart-layers', layerNames=['horizon','minimum','moonlight'];
 try{const saved=JSON.parse(sessionStorage.getItem(layerKey));for(const name of layerNames){if(typeof saved?.[name]==='boolean')document.getElementById('show-'+name).checked=saved[name];}}catch(_){}
 if(!data.horizon)document.getElementById('show-horizon').disabled=true;
 
-const comparisonLegend=document.getElementById('comparison-legend');
-const legendItems=data.primary_name?[[data.primary_name,'#4c9be8','Primary']]:[];
-if(data.comparison)legendItems.push([data.comparison.name,'#19b38c','']);
-if(legendItems.length){
- comparisonLegend.hidden=false;
- for(const [name,colour,role] of legendItems){
-  const item=document.createElement('span');item.style.color=colour;item.textContent=role?`${name} (${role})`:name;comparisonLegend.append(item);
- }
+const targetLegend=document.getElementById('target-legend');
+if(data.target_name){
+ targetLegend.hidden=false;
+ const item=document.createElement('span');item.style.color='#4c9be8';item.textContent=data.target_name;targetLegend.append(item);
 }
 const visible=name=>document.getElementById('show-'+name).checked;
 let intervalGroup;
@@ -94,7 +86,7 @@ const x=t=>left+(t-t0)/(t1-t0)*(width-left-right);
 const y=a=>bottom-(a-minY)/(maxY-minY)*(bottom-plotTop);
 function el(tag,attrs,parent=svg){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);parent.append(e);return e;}
 function text(value,attrs){const e=el('text',attrs);e.textContent=value;return e;}
-function path(values,color,dash,times=data.times){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
+function path(values,color){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(data.times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2});}
 const weatherRows=[
  {layer:'clouds',label:'Cloud',key:'segments',top:cloudTop,bottom:cloudBottom,attribute:'data-cloud-cover',unavailable:'data-cloud-unavailable',description:'Cloud cover'},
  {layer:'precip',label:'Precip.',key:'precipitation_segments',top:precipTop,bottom:precipBottom,attribute:'data-precip-probability',unavailable:'data-precip-unavailable',description:'Precipitation probability'}
@@ -149,12 +141,6 @@ function draw(){
  if(visible('minimum'))el('line',{x1:left,x2:width-right,y1:y(data.minimum),y2:y(data.minimum),stroke:'#e69520','stroke-width':2,'stroke-dasharray':'2 4'});
  if(data.horizon&&visible('horizon'))path(data.horizon,'#c44e52');
  path(data.alt,'#4c9be8');
- if(data.comparison){
-   const comparison=path(data.comparison.alt,'#19b38c','6 3',data.comparison.times);
-   comparison.setAttribute('data-secondary-target',data.comparison.name);
-   comparison.setAttribute('pointer-events','none');
-   el('title',{},comparison).textContent=data.comparison.name+' (comparison)';
- }
  if(visible('moonlight'))for(const period of data.moon_interference||[]){
   const beginning=Math.max(t0,period.start),ending=Math.min(t1,period.end);
   if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffff00','fill-opacity':0.9,'pointer-events':'none'});
@@ -206,11 +192,8 @@ function renderInterval(pointerTime=null){
   label.textContent=timeFormat.format(t);
  });
  const totals=Observation.summary(boundaries,data.exposure_seconds,pointerTime);
- const comparisonTotals=data.comparison?Observation.summary(boundaries.slice(1,3),data.exposure_seconds,pointerTime):null;
- const duration=value=>value?Observation.duration(value.seconds):'—';
- const images=value=>value?value.images.toLocaleString('en-GB'):'—';
- document.getElementById('duration').textContent=pairedValue(duration(totals),duration(comparisonTotals));
- document.getElementById('images').textContent=pairedValue(images(totals),images(comparisonTotals));
+ document.getElementById('duration').textContent=totals?Observation.duration(totals.seconds):'—';
+ document.getElementById('images').textContent=totals?totals.images.toLocaleString('en-GB'):'—';
 }
 function publishInterval(){window.parent.postMessage({type:'mw-astro-interval',points:boundaries},'*');}
 function saveInterval(){try{sessionStorage.setItem(storageKey,JSON.stringify(boundaries));}catch(_){} publishInterval();}
@@ -218,7 +201,7 @@ svg.addEventListener('click',event=>{
  const bounds=svg.getBoundingClientRect(),px=event.clientX-bounds.left,py=event.clientY-bounds.top;
  if(px<left||px>width-right||py<plotTop||py>bottom)return;
  const instant=Math.max(t0,Math.min(t1,Math.round((t0+(px-left)/(width-left-right)*(t1-t0))/1000)*1000));
- boundaries=Observation.select(boundaries,instant,t0,t1,maximumMarkers);
+ boundaries=Observation.select(boundaries,instant,t0,t1);
  saveInterval();renderInterval();
 });
 const chooseButton=document.getElementById('choose-intervals');
@@ -248,7 +231,7 @@ svg.addEventListener('pointermove',event=>{
  }
  if(py>bottom){document.getElementById('tip').style.display='none';return;}
  show(t0+(px-left)/(width-left-right)*(t1-t0));
- if(boundaries.length===1||(data.comparison&&boundaries.length===2))renderInterval(selectedTime);
+ if(boundaries.length===1)renderInterval(selectedTime);
  const tip=document.getElementById('tip');
  const twilight=(data.astronomical_twilight||[]).find(p=>selectedTime>=p[0]&&selectedTime<=p[1]);
  const night=(data.astronomical_night||[]).find(p=>selectedTime>=p[0]&&selectedTime<=p[1]);

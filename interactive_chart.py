@@ -5,20 +5,14 @@ from pathlib import Path
 import pandas as pd
 
 
-def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=(), suggested_interval=None, primary_name="", comparison_frame=None, comparison_name=None, interval_revision=0, comparison_object_size="Unavailable"):
+def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=(), suggested_interval=None, target_name="", interval_revision=0):
     import math
     if not math.isfinite(exposure_seconds) or exposure_seconds <= 0:
         raise ValueError("Exposure must be positive and finite.")
     times = pd.to_datetime(frame["Time"], utc=True)
     payload = {
         "times": [int(t.timestamp() * 1000) for t in times],
-        "primary_name": primary_name,
-        "comparison": ({
-            "name": comparison_name,
-            "object_size": comparison_object_size,
-            "times": [int(t.timestamp() * 1000) for t in pd.to_datetime(comparison_frame["Time"], utc=True)],
-            "alt": comparison_frame["Altitude (°)"].tolist(),
-        } if comparison_frame is not None else None),
+        "target_name": target_name,
         "suggested_interval": suggested_interval,
         "alt": frame["Altitude (°)"].tolist(),
         "az": frame["Azimuth (°)"].tolist(),
@@ -62,7 +56,7 @@ def selected_interval(value, first, last):
     import math
     from datetime import datetime, timezone
     points = value.get('interval', []) if isinstance(value, dict) else []
-    if not isinstance(points, list) or len(points) > 3:
+    if not isinstance(points, list) or len(points) > 2:
         raise ValueError('Invalid chart interval. Clear the interval and click again.')
     for point in points:
         if isinstance(point, bool) or not isinstance(point, (float, int)) or not math.isfinite(point) or not first.timestamp()*1000 <= point <= last.timestamp()*1000:
@@ -71,7 +65,7 @@ def selected_interval(value, first, last):
         raise ValueError('Missing start and stop times. Click twice on the chart to select an interval.')
     if len(points) == 1:
         raise ValueError('Missing stop time. Click a second point on the chart.')
-    begin, end = sorted(points[:2])
+    begin, end = sorted(points)
     if begin == end:
         raise ValueError('Start and stop times must be different. Select a nonzero interval on the chart.')
     return tuple(datetime.fromtimestamp(point/1000, timezone.utc) for point in (begin,end))

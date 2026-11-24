@@ -2,6 +2,9 @@
 
 ## 2026-11-24
 
+- Return the planner to one selected object, one trajectory, two timeline
+  markers, unbracketed readouts and a single image preview. Remove comparison
+  selection, calculations and preview tabs; retain the clear controls and name.
 - Show a named image-preview tab for each of two selected objects, with
   independent framing centres and deferred loading of the hidden preview.
 - Simplify chart controls and add taller Clear objects / Clear timelines buttons.

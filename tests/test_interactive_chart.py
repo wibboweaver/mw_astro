@@ -63,7 +63,8 @@ def test_selected_interval_missing_invalid_reversed_and_dst():
         with pytest.raises(ValueError,match=message):selected_interval(value,first,last)
     assert selected_interval({'interval':[b,a]},first,last)==(first,last)
     assert (last-first).total_seconds()==6*3600
-    assert selected_interval({'interval':[b,a,a+1000]},first,last)==(first,last)
+    with pytest.raises(ValueError,match='Invalid chart interval'):
+        selected_interval({'interval':[b,a,a+1000]},first,last)
     with pytest.raises(ValueError,match='Invalid chart interval'):
         selected_interval({'interval':[a,b,a,b]},first,last)
 
@@ -80,7 +81,7 @@ def test_moon_band_payload_and_layer_controls():
         assert f'id="show-{name}"' in html
     assert 'Moon trajectory' not in html
     assert "'data-moon-interference'" in html
-    assert 'if(boundaries.length===1||(data.comparison&&boundaries.length===2))renderInterval(selectedTime)' in html
+    assert 'if(boundaries.length===1)renderInterval(selectedTime)' in html
 
 
 def test_moon_distance_readout_payload():

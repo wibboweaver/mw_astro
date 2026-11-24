@@ -116,8 +116,8 @@ def persist_framing(field, component_field):
         st.session_state["settings_save_error"] = f"Settings could not be saved: {exc}"
 
 
-def persist_esa_rotation(component_key='esa_camera_framing'):
-    value=st.session_state.get(component_key,{}).get('rotation')
+def persist_esa_rotation():
+    value=st.session_state.get('esa_camera_framing',{}).get('rotation')
     if value is not None:
         try:
             save_settings_changes(frame_rotation_deg=float(value))
@@ -288,7 +288,7 @@ with st.spinner("Checking target visibility…"):
         eligible = sorted(filter_tracks(tracks, minimum_altitude, horizon_profile, visibility_mode), key=str.casefold)
 if not eligible:
     from target_selection import set_target_selection
-    set_target_selection([])
+    set_target_selection(None)
     st.warning("No targets meet the visibility limits.")
     st.stop()
 
@@ -323,17 +323,12 @@ except (ValueError,OSError,TypeError) as exc:
     st.stop()
 # Keep the displayed rows and their target identities in the same rating order.
 visible_targets=tuple(sorted(visible_targets,key=lambda item:rating_sort_key(ratings[item.common_name],item.common_name)))
-remembered = st.session_state.get("selected_target")
 names=[item.common_name for item in visible_targets]
-previous = st.session_state.get("selected_targets")
-if previous is None:
-    previous = [remembered] if remembered in names else [names[0]]
-default_names = [name for name in previous if name in names]
-if previous and not default_names:
-    default_names = [names[0]]
+remembered = st.session_state.get('selected_target', names[0])
+selected = remembered if remembered in names else names[0] if remembered is not None else None
 from target_selection import set_target_selection
-set_target_selection(default_names)
-default_rows = [names.index(name) for name in default_names]
+set_target_selection(selected)
+default_rows = [names.index(selected)] if selected is not None else []
 # Reset row indices whenever identities/order change, retaining the target by name.
 identities = [(item.common_name, item.object_id, item.ra_deg, item.dec_deg) for item in visible_targets]
 table_key = "target_table:" + hashlib.sha256(json.dumps(identities).encode()).hexdigest()[:16]
@@ -343,8 +338,7 @@ st.caption(f'{usable_count} listed targets have an observable astronomical-night
     'Target visibility filters the full chart period, which can also include daylight and twilight. '
     'Rated targets appear first, followed by targets awaiting assessment, then targets with no usable dark window.')
 display_table=cached_target_table(visible_targets, start, longitude, settings.timezone, windows, (fov_width, fov_height), (camera_width, camera_height), ratings, Path(capture_guidance_module.__file__).stat().st_mtime_ns).copy()
-from target_selection import ordered_selection, update_target_selection
-st.caption("Select up to two targets. First selected: primary (blue). Second: comparison path (green dashed).")
+from target_selection import update_target_selection
 selection = st.dataframe(display_table,
     column_config={'Distance':None,
         'Night rating':st.column_config.ProgressColumn('Night rating',width=112,min_value=0,max_value=100,format='%d',color='auto',help='Preference score, not success probability. Best continuous dark window; Configurable weights: visibility 30, Moon 15, frame 25 by default. Independent of cloud cover and rain risk. Full frame credit at preferred coverage; undersized targets have a configurable score cap. Missing values display Missing data; select the target to see the explanation.'),
@@ -354,20 +348,14 @@ selection = st.dataframe(display_table,
         'Frame coverage':st.column_config.TextColumn('Frame coverage',help='Approximate object major × minor dimensions as percentages of the camera long × short field, with long sides aligned. Above 100% extends beyond that edge. Independent of camera rotation; catalogue sizes are approximate. — means an unknown dimension.'),
         'Window':st.column_config.TextColumn('Window',alignment='left',help='Duration as hours° minutes′. Total time in the chart range above the minimum altitude and local horizon during astronomical night. Estimated from sampled trajectories.')},
     key=table_key, hide_index=True, width="stretch", height=250, placeholder="Missing data",
-    on_select=lambda: update_target_selection(table_key, names), selection_mode="multi-row",
+    on_select=lambda: update_target_selection(table_key, names), selection_mode="single-row",
     selection_default={"selection": {"rows": default_rows}})
 rows = selection.selection.rows
-requested_names = [names[row] for row in rows if 0 <= row < len(visible_targets)]
-selected_names = ordered_selection(st.session_state["selected_targets"], requested_names)
-set_target_selection(selected_names)
-if not selected_names:
-    st.session_state.pop("selected_target", None)
+selected = names[rows[0]] if rows and 0 <= rows[0] < len(names) else None
+set_target_selection(selected)
+if selected is None:
     st.stop()
-selected = selected_names[0]
 target = visible_targets[names.index(selected)]
-comparison_name = selected_names[1] if len(selected_names) > 1 else None
-comparison_frame = tracks[comparison_name] if comparison_name else None
-st.session_state["selected_target"] = selected
 rating=ratings[selected]
 if rating['score'] is None:
     st.caption('Night rating — based on the object’s observable window within the chart period: Missing data — '+rating['reason'])
@@ -423,8 +411,7 @@ with chart_column:
         session_suggestion = dict(points=[], message=f'A session interval could not be suggested: {exc}')
     chart_content = renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
                   interval_revision=st.session_state.get('chart_interval_revision', 0),
-                  primary_name=selected, comparison_frame=comparison_frame, comparison_name=comparison_name,
-                  comparison_object_size=object_size_label(visible_targets[names.index(comparison_name)].object_id) if comparison_name else 'Unavailable',
+                  target_name=selected,
                   exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", suggested_interval=session_suggestion, night_periods=night_periods, twilight_periods=twilight_periods, moon_intervals=moon_data["intervals"], cloud_forecast=cloud_data, moon_distance={"times":moon_data["times"],"separation":moon_data["separation"],"altitudes":moon_data["altitudes"],"illumination":moon_data["illumination"],"phase_angles":moon_data["phase_angles"],"enabled":moon_data["enabled"]})
     interval_revision = st.session_state.get('chart_interval_revision', 0)
     interval_key = "observation:" + hashlib.sha256(f"{interval_revision}:{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]
@@ -436,26 +423,14 @@ if image_column is not None:
         import esa_preview
         if esa_preview._loaded_source_stamp != (Path(esa_preview.__file__).stat().st_mtime_ns,Path(esa_preview.__file__).with_suffix('.js').stat().st_mtime_ns):
             importlib.reload(esa_preview)
-        def render_target_preview(preview_target, component_key):
-            requested_fov = preview_fov(preview_target.object_id) if image_field == "Fit target" else float(image_field.rstrip("°"))
-            fov = fit_preview_field(requested_fov, focal_length, sensor_width, sensor_height)
-            preview_key=(preview_target.object_id,preview_target.ra_deg,preview_target.dec_deg)
-            fields=st.session_state.setdefault('esa_preview_fields',{})
-            fov=fields.setdefault(preview_key,fov)
-            data=esa_preview.esa_preview_data(preview_target.ra_deg,preview_target.dec_deg,focal_length,sensor_width,sensor_height,fov,
-                settings.frame_rotation_deg,int(camera_width),int(camera_height),view_key=f'{preview_target.ra_deg}:{preview_target.dec_deg}')
-            esa_preview.render_esa_preview(data,key=component_key,
-                on_rotation_change=lambda:persist_esa_rotation(component_key))
-
-        if comparison_name:
-            preview_targets = [target, visible_targets[names.index(comparison_name)]]
-            image_tabs = st.tabs(selected_names, key='target_image_tabs')
-            for preview_target, image_tab, component_key in zip(preview_targets, image_tabs,
-                    ('esa_camera_framing', 'esa_camera_framing_comparison')):
-                with image_tab:
-                    render_target_preview(preview_target, component_key)
-        else:
-            render_target_preview(target, 'esa_camera_framing')
+        requested_fov = preview_fov(target.object_id) if image_field == "Fit target" else float(image_field.rstrip("°"))
+        fov = fit_preview_field(requested_fov, focal_length, sensor_width, sensor_height)
+        preview_key=(target.object_id,target.ra_deg,target.dec_deg)
+        fields=st.session_state.setdefault('esa_preview_fields',{})
+        fov=fields.setdefault(preview_key,fov)
+        data=esa_preview.esa_preview_data(target.ra_deg,target.dec_deg,focal_length,sensor_width,sensor_height,fov,
+            settings.frame_rotation_deg,int(camera_width),int(camera_height),view_key=f'{target.ra_deg}:{target.dec_deg}')
+        esa_preview.render_esa_preview(data,on_rotation_change=persist_esa_rotation)
         st.markdown(night_description)
         with st.expander('Chart legend', expanded=False):
             legend_items = (
