@@ -80,10 +80,12 @@ try{const saved=JSON.parse(sessionStorage.getItem(layerKey));for(const name of l
 if(!data.horizon)document.getElementById('show-horizon').disabled=true;
 
 const comparisonLegend=document.getElementById('comparison-legend');
-if(data.comparison){
+const legendItems=data.primary_name?[[data.primary_name,'#4c9be8','Primary']]:[];
+if(data.comparison)legendItems.push([data.comparison.name,'#19b38c','']);
+if(legendItems.length){
  comparisonLegend.hidden=false;
- for(const [name,colour,role] of [[data.primary_name,'#4c9be8','Primary'],[data.comparison.name,'#19b38c','Comparison · dashed']]){
-  const item=document.createElement('span');item.style.color=colour;item.textContent=`${name} (${role})`;comparisonLegend.append(item);
+ for(const [name,colour,role] of legendItems){
+  const item=document.createElement('span');item.style.color=colour;item.textContent=role?`${name} (${role})`:name;comparisonLegend.append(item);
  }
 }
 const visible=name=>document.getElementById('show-'+name).checked;

@@ -13,7 +13,7 @@ def test_click_markers_exist_before_resize_and_survive_redraw(tmp_path):
     frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
     first=frame.Time[0].timestamp()*1000
     segments=[dict(start=first+i*14400000,end=first+(i+1)*14400000,percent=value) for i,value in enumerate([0,50,100])]
-    content=chart_html(frame,40,'Europe/London',cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
+    content=chart_html(frame,40,'Europe/London',primary_name='Single target',cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
     script=content.split('<script>')[1].split('</script>')[0]
     source=tmp_path/'chart.js';source.write_text(script)
     harness=r'''
@@ -34,6 +34,9 @@ const plot=get('plot');
 const group=()=>plot.children.find(e=>e.attrs.id==='interval-lines');
 const markers=()=>group().children.filter(e=>'data-boundary' in e.attrs);
 assert.ok(group(),'marker layer must be created synchronously');
+assert.equal(get('comparison-legend').hidden,false);
+assert.equal(get('comparison-legend').children.length,1);
+assert.equal(get('comparison-legend').children[0].textContent,'Single target (Primary)');
 const clouds=()=>plot.children.filter(e=>'data-cloud-cover' in e.attrs);
 const rain=()=>plot.children.filter(e=>'data-precip-probability' in e.attrs);
 assert.equal(clouds().length,3);assert.equal(rain().length,3);
@@ -129,7 +132,7 @@ assert.equal(secondary().length,1);
 assert.equal(secondary()[0].attrs.stroke,'#19b38c');
 assert.equal(secondary()[0].attrs['stroke-dasharray'],'6 3');
 assert.equal(get('comparison-legend').children[0].textContent,'A (Primary)');
-assert.match(get('comparison-legend').children[1].textContent,/B/);
+assert.equal(get('comparison-legend').children[1].textContent,'B');
 assert.match(get('alt').textContent,/50/);
 assert.equal(get('object-size').textContent,'12 × 8′ [24 × 16′]');
 assert.equal(get('duration').textContent,'— [—]');
