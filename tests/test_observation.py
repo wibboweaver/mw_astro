@@ -51,7 +51,7 @@ assert.throws(()=>p.summary(points,NaN));
     subprocess.run([node,'-e',script,str(module)],check=True,capture_output=True,text=True)
 
 
-def test_moon_phase_icons_and_impact_ratings():
+def test_moon_phase_icons_and_selected_interval_impact_ratings():
     node=shutil.which('node')
     if not node:pytest.skip('Node required')
     module=Path(__file__).resolve().parents[1]/'observation.js'
@@ -64,10 +64,24 @@ assert.equal(p.moonPhase(270).name,'Last quarter');
 assert.equal(p.moonPhase(359).name,'New Moon');
 assert.equal(p.moonPhase(null).name,'Moon phase unavailable');
 const intervals=[{start:10,end:20,level:'possible'},{start:20,end:30,level:'strong'}];
-assert.equal(p.moonRating(50,30,80,intervals,5,true),'Low impact');
-assert.equal(p.moonRating(50,30,80,intervals,15,true),'Moderate impact');
-assert.equal(p.moonRating(20,30,80,intervals,25,true),'High impact');
-assert.equal(p.moonRating(50,30,80,intervals,15,false),'Unknown');
-assert.equal(p.moonRating(null,30,80,intervals,15,true),'Unknown');
+const moon={times:[0,40],separation:[50,60],altitudes:[30,35],illumination:[80,81],enabled:true};
+assert.equal(p.moonWindowRating([],moon,intervals).rating,'Select interval');
+assert.equal(p.moonWindowRating([10],moon,intervals).rating,'Select interval');
+assert.equal(p.moonWindowRating([10,10],moon,intervals).rating,'Select interval');
+assert.deepEqual(p.moonWindowRating([0,10],moon,intervals),{rating:'Low impact',affectedPercent:0,strongPercent:0});
+assert.deepEqual(p.moonWindowRating([10,20],moon,intervals),{rating:'Moderate impact',affectedPercent:100,strongPercent:0});
+assert.deepEqual(p.moonWindowRating([15,25],moon,intervals),{rating:'High impact',affectedPercent:100,strongPercent:50});
+assert.deepEqual(p.moonWindowRating([25,15],moon,intervals),p.moonWindowRating([15,25],moon,intervals));
+assert.deepEqual(p.moonWindowRating([0,40],moon,intervals),{rating:'High impact',affectedPercent:50,strongPercent:25});
+assert.equal(p.moonWindowRating([30,40],moon,intervals).rating,'Low impact');
+assert.equal(p.moonWindowRating([10,20],{...moon,enabled:false},intervals).rating,'Unknown');
+assert.equal(p.moonWindowRating([-1,10],moon,intervals).rating,'Unknown');
+assert.equal(p.moonWindowRating([0,41],moon,intervals).rating,'Unknown');
+assert.equal(p.moonWindowRating([10,20],{...moon,separation:[null,60]},intervals).rating,'Unknown');
+assert.equal(p.moonWindowRating([10,20],undefined,intervals).rating,'Unknown');
+assert.equal(p.moonWindowRating([10,20],moon,undefined).rating,'Unknown');
+const overlapping=[{start:20,end:30,level:'strong'},{start:10,end:25,level:'possible'}];
+assert.deepEqual(p.moonWindowRating([0,40],moon,overlapping),{rating:'High impact',affectedPercent:50,strongPercent:25});
+assert.deepEqual(p.moonWindowRating([0,40],moon,[]),{rating:'Low impact',affectedPercent:0,strongPercent:0});
 """
     subprocess.run([node,'-e',script,str(module)],check=True,capture_output=True,text=True)

@@ -2,6 +2,8 @@
 
 ## 2026-11-24
 
+- Base the chart's Moon rating on the selected start–end interval, with the
+  strongest overlapping interference level and affected-time percentages.
 - Return the planner to one selected object, one trajectory, two timeline
   markers, unbracketed readouts and a single image preview. Remove comparison
   selection, calculations and preview tabs; retain the clear controls and name.

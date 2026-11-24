@@ -348,6 +348,15 @@ trajectory, one image preview and unbracketed object size, HH:MM duration and
 image-count readouts. Two timeline markers define the selected interval; another
 click starts a new interval. Pointer movement previews a missing endpoint.
 
+The chart's Moon rating summarises the selected start–end interval using the
+existing configured Moon interference periods: any strong overlap gives High
+impact, other overlap gives Moderate impact, and no overlap gives Low impact.
+Its tooltip shows the percentage of the interval affected and the percentage
+with high impact. It displays Select interval until two distinct endpoints are
+chosen, or Unknown if Moon assessment is disabled or data are unavailable.
+Cursor movement still controls the angle, illumination and phase readouts;
+it does not change the selected-interval rating.
+
 Clear objects, to the right of the chart's layer checkboxes, unchecks the selected
 object and clears its timelines and report. Clear timelines beside it removes
 the markers while keeping the object selected. Changing or filtering out the

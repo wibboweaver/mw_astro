@@ -40,10 +40,28 @@
     const index=Math.floor((((angle%360)+360)%360+22.5)/45)%8;
     return {icon:['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'][index],name:['New Moon','Waxing crescent','First quarter','Waxing gibbous','Full Moon','Waning gibbous','Last quarter','Waning crescent'][index]};
   }
-  function moonRating(separation,altitude,illumination,intervals,timestamp,enabled){
-    if(!enabled||![separation,altitude,illumination].every(Number.isFinite))return 'Unknown';
-    const interval=(intervals||[]).find(p=>timestamp>=p.start&&timestamp<p.end);
-    return interval?.level==='strong'?'High impact':interval?'Moderate impact':'Low impact';
+  function moonWindowRating(points,moon,intervals){
+    const unavailable=rating=>({rating,affectedPercent:null,strongPercent:null});
+    if(!Array.isArray(points)||points.length!==2||!points.every(Number.isFinite)||points[0]===points[1])return unavailable('Select interval');
+    const [first,last]=points.slice().sort((a,b)=>a-b);
+    const times=moon?.times;
+    if(!moon?.enabled||!Array.isArray(times)||times.length<2||
+       !times.every((time,index)=>Number.isFinite(time)&&(index===0||time>times[index-1]))||
+       first<times[0]||last>times.at(-1)||
+       !['separation','altitudes','illumination'].every(key=>Array.isArray(moon[key])&&moon[key].length===times.length&&moon[key].every(Number.isFinite))||
+       !Array.isArray(intervals)||!intervals.every(period=>Number.isFinite(period.start)&&Number.isFinite(period.end)&&period.end>period.start&&['possible','strong'].includes(period.level)))return unavailable('Unknown');
+    const clipped=intervals.map(period=>({start:Math.max(first,period.start),end:Math.min(last,period.end),level:period.level})).filter(period=>period.end>period.start);
+    function coveredTime(periods){
+      let total=0,end=first;
+      for(const period of periods.slice().sort((a,b)=>a.start-b.start)){
+        total+=Math.max(0,period.end-Math.max(end,period.start));
+        end=Math.max(end,period.end);
+      }
+      return total;
+    }
+    const affected=coveredTime(clipped),strong=coveredTime(clipped.filter(period=>period.level==='strong'));
+    return {rating:strong>0?'High impact':affected>0?'Moderate impact':'Low impact',
+            affectedPercent:100*affected/(last-first),strongPercent:100*strong/(last-first)};
   }
-  return {select, summary, duration, restore, interpolate, moonPhase, moonRating};
+  return {select, summary, duration, restore, interpolate, moonPhase, moonWindowRating};
 });

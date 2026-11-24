@@ -178,11 +178,15 @@ function show(t){
  const phase=Observation.moonPhase(phaseAngle);
  const icon=document.getElementById('moon-phase');icon.textContent=phase.icon;icon.title=phase.name;icon.setAttribute('aria-label',phase.name);
  document.getElementById('moon-phase-name').textContent=phase.name;
- const rating=Observation.moonRating(moonDistance,moonAltitude,moonIllumination,data.moon_interference,selectedTime,data.moon_distance?.enabled);
- const ratingElement=document.getElementById('moon-rating');ratingElement.textContent=rating;
- ratingElement.title='Estimated broadband moonlight impact from the configured illumination, separation and Moon-altitude rules. Not a measured loss of image quality.';
- ratingElement.style.color=rating==='Low impact'?'#22c55e':rating==='Moderate impact'?'#f59e0b':rating==='High impact'?'#ef4444':'inherit';
  document.getElementById('datetime').textContent=timeFormat.format(selectedTime);
+}
+function renderMoonRating(){
+ const result=Observation.moonWindowRating(boundaries,data.moon_distance,data.moon_interference);
+ const ratingElement=document.getElementById('moon-rating');ratingElement.textContent=result.rating;
+ ratingElement.title=result.rating==='Select interval'?'Choose two different start and end times to rate the selected interval.':
+   result.rating==='Unknown'?'Moon assessment is disabled or data do not cover the selected interval.':
+   `Selected interval: ${result.affectedPercent.toFixed(1)}% affected by estimated Moon interference, including ${result.strongPercent.toFixed(1)}% high impact. Rating shows the highest impact reached, using the configured illumination, separation and Moon-altitude rules. Not a measured loss of image quality.`;
+ ratingElement.style.color=result.rating==='Low impact'?'#22c55e':result.rating==='Moderate impact'?'#f59e0b':result.rating==='High impact'?'#ef4444':'inherit';
 }
 function renderInterval(pointerTime=null){
  intervalGroup.replaceChildren();
@@ -194,6 +198,7 @@ function renderInterval(pointerTime=null){
  const totals=Observation.summary(boundaries,data.exposure_seconds,pointerTime);
  document.getElementById('duration').textContent=totals?Observation.duration(totals.seconds):'—';
  document.getElementById('images').textContent=totals?totals.images.toLocaleString('en-GB'):'—';
+ renderMoonRating();
 }
 function publishInterval(){window.parent.postMessage({type:'mw-astro-interval',points:boundaries},'*');}
 function saveInterval(){try{sessionStorage.setItem(storageKey,JSON.stringify(boundaries));}catch(_){} publishInterval();}

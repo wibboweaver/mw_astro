@@ -13,7 +13,10 @@ def test_click_markers_exist_before_resize_and_survive_redraw(tmp_path):
     frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
     first=frame.Time[0].timestamp()*1000
     segments=[dict(start=first+i*14400000,end=first+(i+1)*14400000,percent=value) for i,value in enumerate([0,50,100])]
-    content=chart_html(frame,40,'Europe/London',target_name='Single target',cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
+    moon = dict(times=[first, first+12*3600000], separation=[50, 70], altitudes=[20, 30], illumination=[80, 81], enabled=True)
+    interference = [dict(start=first+3600000, end=first+5400000, level='possible'),
+                    dict(start=first+5400000, end=first+7200000, level='strong')]
+    content=chart_html(frame,40,'Europe/London',target_name='Single target',moon_distance=moon,moon_intervals=interference,cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
     script=content.split('<script>')[1].split('</script>')[0]
     source=tmp_path/'chart.js';source.write_text(script)
     harness=r'''
@@ -34,6 +37,7 @@ const plot=get('plot');
 const group=()=>plot.children.find(e=>e.attrs.id==='interval-lines');
 const markers=()=>group().children.filter(e=>'data-boundary' in e.attrs);
 assert.ok(group(),'marker layer must be created synchronously');
+assert.equal(get('moon-rating').textContent,'Select interval');
 assert.equal(get('target-legend').hidden,false);
 assert.equal(get('target-legend').children.length,1);
 assert.equal(get('target-legend').children[0].textContent,'Single target');
@@ -56,10 +60,13 @@ assert.equal(rain().length,3);assert.equal(clouds().length,3);
 get('show-minimum').checked=true;get('show-minimum').onchange();
 plot.handlers.click({clientX:200,clientY:100});
 assert.equal(markers().length,1);
+assert.equal(get('moon-rating').textContent,'Select interval');
 plot.handlers.pointermove({clientX:400,clientY:100});
 assert.notEqual(get('duration').textContent,'—');
+assert.equal(get('moon-rating').textContent,'Select interval');
 plot.handlers.click({clientX:600,clientY:100});
 assert.equal(markers().length,2);
+assert.equal(get('moon-rating').textContent,'Low impact');
 const duration=get('duration').textContent;
 assert.match(duration,/^\d{2,}:\d{2}$/);
 assert.equal(get('object-size').textContent,'Unavailable');
@@ -71,9 +78,19 @@ assert.equal(get('choose-intervals').disabled,false);
 get('choose-intervals').handlers.click();
 assert.deepEqual(Array.from(events.at(-1).points),[Date.parse('2026-11-18T19:00Z'),Date.parse('2026-11-18T20:00Z')]);
 assert.equal(markers().length,2);
+assert.equal(get('moon-rating').textContent,'High impact');
+assert.match(get('moon-rating').title,/100.0% affected/);
+assert.match(get('moon-rating').title,/50.0% high impact/);
+const angle=get('moon-distance').textContent;
+plot.handlers.pointermove({clientX:800,clientY:100});
+assert.notEqual(get('moon-distance').textContent,angle);
+assert.equal(get('moon-rating').textContent,'High impact');
+get('show-moonlight').checked=false;get('show-moonlight').onchange();
+assert.equal(get('moon-rating').textContent,'High impact');
 get('clear-timelines').handlers.click();
 assert.equal(markers().length,0);
 assert.equal(events.at(-1).points.length,0);
+assert.equal(get('moon-rating').textContent,'Select interval');
 '''
     subprocess.run([node,'-e',harness,str(source)],check=True,capture_output=True,text=True)
 
