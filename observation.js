@@ -18,8 +18,8 @@
     return {seconds, images: Math.floor(seconds / exposureSeconds)};
   }
   function duration(seconds) {
-    const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = Math.floor(seconds % 60);
-    return [h,m,s].map(v => String(v).padStart(2,'0')).join(':');
+    const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60);
+    return [h,m].map(v => String(v).padStart(2,'0')).join(':');
   }
   function restore(raw, first, last, maximum=2) {
     try {

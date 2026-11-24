@@ -2,6 +2,9 @@
 
 ## 2026-11-24
 
+- Simplify chart controls and add taller Clear objects / Clear timelines buttons.
+  Show paired duration (HH:MM), image count and object size readouts; the second
+  object's bracketed duration and count use timelines 2–3.
 - Add Clear objects beside the chart's precipitation checkbox. Allow a third
   timeline with two selected targets, keeping calculations on the first two;
   deselecting any target clears all timelines and the previous report.

@@ -602,6 +602,19 @@ def test_filter_promotes_remaining_comparison_target():
         assert chart_payload(app)['interval_revision'] > 0
 
 
+def test_two_target_chart_carries_each_objects_own_size():
+    from object_sizes import format_size
+    sizes = {'TEST1': (60., 30.), 'TEST2': (120., 60.)}
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('object_sizes.catalogue_sizes', return_value=sizes):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        select_targets(app, ['Fixture low'])
+        select_targets(app, ['Fixture low', 'Fixture high'])
+        assert not app.exception
+        payload = chart_payload(app)
+        assert payload['object_size'] == format_size(60., 30.)
+        assert payload['comparison']['object_size'] == format_size(120., 60.)
+
+
 def send_chart_event(app, points=None, clear_objects=False):
     import json
     from streamlit.components.v2.bidi_component.main import _make_trigger_id

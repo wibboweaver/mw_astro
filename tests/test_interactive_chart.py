@@ -76,11 +76,11 @@ def test_moon_band_payload_and_layer_controls():
     data=json.loads(html.split('const data=')[1].split(';')[0])
     assert data['moon_interference']==periods
     assert 'moon' not in data
-    for name in ('horizon','object','minimum','moonlight'):
+    for name in ('horizon','minimum','moonlight'):
         assert f'id="show-{name}"' in html
     assert 'Moon trajectory' not in html
     assert "'data-moon-interference'" in html
-    assert 'if(boundaries.length===1)renderInterval(selectedTime)' in html
+    assert 'if(boundaries.length===1||(data.comparison&&boundaries.length===2))renderInterval(selectedTime)' in html
 
 
 def test_moon_distance_readout_payload():
@@ -136,6 +136,11 @@ def test_choose_intervals_button_precedes_clear_and_carries_suggestion():
     html = chart_html(frame, 40, 'Europe/London', suggested_interval=suggestion)
     payload = json.JSONDecoder().raw_decode(html.split('const data=', 1)[1])[0]
     assert payload['suggested_interval'] == suggestion
-    assert html.index('id="choose-intervals"') < html.index('id="clear-interval"')
+    assert 'id="clear-interval"' not in html
+    assert html.index('id="clear-objects"') < html.index('id="clear-timelines"') < html.index('<div class="cards">')
     assert 'chooseButton.disabled=!validSuggestion' in html
-    assert html.index('id="show-precip"') < html.index('id="clear-objects"') < html.index('<div class="cards">')
+    assert html.index('id="show-moonlight"') < html.index('id="clear-objects"')
+    for removed in ('object', 'clouds', 'precip'):
+        assert f'id="show-{removed}"' not in html
+        assert f"visible('{removed}')" not in html
+    assert 'weatherBottom' not in html

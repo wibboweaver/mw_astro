@@ -48,9 +48,9 @@ plot.handlers.pointermove({clientX:200,clientY:301});
 assert.match(get('tip').textContent,/Cloud cover 0%/);
 plot.handlers.pointermove({clientX:200,clientY:312});
 assert.equal(get('tip').style.display,'none');
-get('show-precip').checked=false;get('show-precip').onchange();
-assert.equal(rain().length,0);assert.equal(clouds().length,3);
-get('show-precip').checked=true;get('show-precip').onchange();
+get('show-minimum').checked=false;get('show-minimum').onchange();
+assert.equal(rain().length,3);assert.equal(clouds().length,3);
+get('show-minimum').checked=true;get('show-minimum').onchange();
 plot.handlers.click({clientX:200,clientY:100});
 assert.equal(markers().length,1);
 plot.handlers.pointermove({clientX:400,clientY:100});
@@ -58,6 +58,8 @@ assert.notEqual(get('duration').textContent,'—');
 plot.handlers.click({clientX:600,clientY:100});
 assert.equal(markers().length,2);
 const duration=get('duration').textContent;
+assert.match(duration,/^\d{2,}:\d{2}$/);
+assert.equal(get('object-size').textContent,'Unavailable');
 resize();assert.equal(markers().length,2);
 plot.handlers.pointermove({clientX:700,clientY:100});
 assert.equal(get('duration').textContent,duration);
@@ -66,7 +68,7 @@ assert.equal(get('choose-intervals').disabled,false);
 get('choose-intervals').handlers.click();
 assert.deepEqual(Array.from(events.at(-1).points),[Date.parse('2026-11-18T19:00Z'),Date.parse('2026-11-18T20:00Z')]);
 assert.equal(markers().length,2);
-get('clear-interval').handlers.click();
+get('clear-timelines').handlers.click();
 assert.equal(markers().length,0);
 assert.equal(events.at(-1).points.length,0);
 '''
@@ -104,7 +106,7 @@ def test_comparison_path_keeps_primary_readout_and_interval_on_redraw(tmp_path):
     if not node:pytest.skip('Node required')
     frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
     comparison=frame.assign(**{'Altitude (°)':[20,30]})
-    content=chart_html(frame,40,'Europe/London',primary_name='A',comparison_frame=comparison,comparison_name='B')
+    content=chart_html(frame,40,'Europe/London',object_size='12 × 8′',primary_name='A',comparison_frame=comparison,comparison_name='B',comparison_object_size='24 × 16′')
     source=tmp_path/'comparison.js';source.write_text(content.split('<script>')[1].split('</script>')[0])
     harness=r'''
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
@@ -129,22 +131,29 @@ assert.equal(secondary()[0].attrs['stroke-dasharray'],'6 3');
 assert.equal(get('comparison-legend').children[0].textContent,'A (Primary)');
 assert.match(get('comparison-legend').children[1].textContent,/B/);
 assert.match(get('alt').textContent,/50/);
+assert.equal(get('object-size').textContent,'12 × 8′ [24 × 16′]');
+assert.equal(get('duration').textContent,'— [—]');
+assert.equal(get('images').textContent,'— [—]');
 plot.handlers.click({clientX:200,clientY:100});plot.handlers.click({clientX:400,clientY:100});
 const interval=JSON.stringify(events.at(-1).points);resize();assert.equal(secondary().length,1);
 assert.equal(JSON.stringify(events.at(-1).points),interval);
 const duration=get('duration').textContent,images=get('images').textContent;
-plot.handlers.click({clientX:600,clientY:100});
+assert.match(duration,/^\d{2,}:\d{2} \[—\]$/);
+plot.handlers.pointermove({clientX:700,clientY:100});
+assert.match(get('duration').textContent,/^\d{2,}:\d{2} \[\d{2,}:\d{2}\]$/);
+assert.equal(get('duration').textContent.split(' [')[0],duration.split(' [')[0]);
+plot.handlers.click({clientX:700,clientY:100});
 assert.equal(events.at(-1).points.length,3);
 assert.equal(JSON.stringify(events.at(-1).points.slice(0,2)),interval);
-assert.equal(get('duration').textContent,duration);assert.equal(get('images').textContent,images);
+const comparisonTotals=ctx.Observation.summary(events.at(-1).points.slice(1,3),180);
+assert.equal(get('duration').textContent,`${duration.split(' [')[0]} [${ctx.Observation.duration(comparisonTotals.seconds)}]`);
+assert.equal(get('images').textContent,`${images.split(' [')[0]} [${comparisonTotals.images.toLocaleString('en-GB')}]`);
 const markers=()=>plot.children.find(e=>e.attrs.id==='interval-lines').children.filter(e=>'data-boundary' in e.attrs);
 assert.equal(markers().length,3);resize();assert.equal(markers().length,3);
 assert.ok(markers().every(marker=>marker.attrs.y2===277));
-get('show-precip').checked=false;get('show-precip').onchange();
-get('show-clouds').checked=false;get('show-clouds').onchange();
+get('show-moonlight').checked=false;get('show-moonlight').onchange();
 assert.ok(markers().every(marker=>marker.attrs.y2===277));
-get('show-object').checked=false;get('show-object').onchange();assert.equal(secondary().length,0);
-get('show-object').checked=true;get('show-object').onchange();assert.equal(secondary().length,1);
+assert.equal(secondary().length,1);
 // A rerun preserves all three markers, including the extra visual reference.
 const script=fs.readFileSync(process.argv[1],'utf8');
 vm.runInContext(script,vm.createContext({...ctx}));assert.equal(markers().length,3);
@@ -153,6 +162,10 @@ saved.set('mw-astro-interval:0:another-target:1:2','[1,2]');
 vm.runInContext(script.replace('"interval_revision": 0','"interval_revision": 1'),vm.createContext({...ctx}));
 assert.equal(markers().length,0);
 assert.ok(!Array.from(saved.keys()).some(key=>key.startsWith('mw-astro-interval:0:')));
+get('clear-timelines').handlers.click();
+assert.equal(markers().length,0);assert.equal(events.at(-1).type,'mw-astro-interval');
+assert.equal(events.at(-1).points.length,0);assert.equal(secondary().length,1);
+assert.equal(get('duration').textContent,'— [—]');assert.equal(get('images').textContent,'— [—]');
 plot.handlers.click({clientX:200,clientY:100});assert.equal(markers().length,1);
 get('clear-objects').handlers.click();
 assert.equal(markers().length,0);

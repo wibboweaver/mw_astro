@@ -55,9 +55,9 @@ def test_chart_cloud_payload_and_strip():
     html=chart_html(frame,40,'Europe/London',cloud_forecast=forecast)
     payload=json.loads(html.split('const data=')[1].split(';')[0])
     assert payload['cloud_forecast']==forecast
-    assert 'id="show-clouds"' in html
+    assert 'id="show-clouds"' not in html
     assert "'data-cloud-cover'" in html and 'cloud-unavailable' in html
-    assert "y2:weatherBottom()" in html
+    assert "y2:bottom-8" in html
 
 
 def test_window_summary_weights_partial_hours_and_uses_full_window_percentage():

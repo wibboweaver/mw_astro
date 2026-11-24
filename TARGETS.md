@@ -343,10 +343,16 @@ equipment, forecasting and rig values; JSON _description and _notes fields expla
 the selection rules. Legacy TOML import remains supported when an explicit .toml
 file is supplied to a loader. The application reads and writes config.json.
 
-Clear objects, beside the chart's Precipitation checkbox, unchecks the selected
-visible targets and clears all timelines. With two selected targets, three clicks
-can place three timeline markers; the third is a visual reference only. Duration,
-image counts and imaging reports always use the first two markers. A further
+Clear objects, to the right of the chart's layer checkboxes, unchecks the selected
+visible targets and clears all timelines. Clear timelines beside it clears the
+markers while retaining the selected targets. Trajectories, cloud cover and
+precipitation remain visible without individual toggles. With two selected
+targets, three clicks can place three timeline markers. Duration uses HH:MM [HH:MM]
+and image counts use count [count]: the first object's values use timelines 1–2,
+and the bracketed second object's values use timelines 2–3. Object size also
+shows the second target's own size in brackets. Until an interval is complete,
+its value shows an em dash; pointer movement previews its missing endpoint.
+Imaging reports continue to use the first two markers. A further
 click starts a new interval. Deselecting either target, including removal by a
 visibility filter, clears all timeline markers and the previous report. Adding
 a comparison target preserves the existing interval.

@@ -424,6 +424,7 @@ with chart_column:
     chart_content = renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
                   interval_revision=st.session_state.get('chart_interval_revision', 0),
                   primary_name=selected, comparison_frame=comparison_frame, comparison_name=comparison_name,
+                  comparison_object_size=object_size_label(visible_targets[names.index(comparison_name)].object_id) if comparison_name else 'Unavailable',
                   exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", suggested_interval=session_suggestion, night_periods=night_periods, twilight_periods=twilight_periods, moon_intervals=moon_data["intervals"], cloud_forecast=cloud_data, moon_distance={"times":moon_data["times"],"separation":moon_data["separation"],"altitudes":moon_data["altitudes"],"illumination":moon_data["illumination"],"phase_angles":moon_data["phase_angles"],"enabled":moon_data["enabled"]})
     interval_revision = st.session_state.get('chart_interval_revision', 0)
     interval_key = "observation:" + hashlib.sha256(f"{interval_revision}:{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]

@@ -26,8 +26,9 @@ assert.deepEqual(p.summary([start,start+179000],180),{seconds:179,images:0});
 assert.deepEqual(p.summary([start,start+181000],180),{seconds:181,images:1});
 // UTC elapsed time stays correct over midnight and the autumn clock change.
 assert.equal(p.summary([start,start+4*3600000],180).seconds,14400);
-assert.equal(p.duration(14461),'04:01:01');
-assert.equal(p.duration(25*3600),'25:00:00');
+assert.equal(p.duration(14461),'04:01');
+assert.equal(p.duration(25*3600),'25:00');
+assert.equal(p.duration(59),'00:00');
 assert.deepEqual(p.select(points,start+1000,start,end),[start+1000]);
 assert.deepEqual(p.select(points,end+1,start,end),points);
 const three=p.select(points,start+7200000,start,end,3);
