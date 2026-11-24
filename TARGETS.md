@@ -357,6 +357,13 @@ click starts a new interval. Deselecting either target, including removal by a
 visibility filter, clears all timeline markers and the previous report. Adding
 a comparison target preserves the existing interval.
 
+With two targets selected, the image panel has a tab named for each object.
+Switch tabs manually to view either preview; this does not change the primary
+target, chart interval or report. Each preview retains its own framing centre
+and initial field of view. The hidden tab loads its viewer when first opened.
+Camera geometry and rotation remain shared equipment settings. A single selected
+target uses the existing image panel without tabs.
+
 The Image annotator page runs the separate Astro Annotate project from a sibling
 directory named astro-annotate. Its app.py, image_canvas component and own
 configuration must be present alongside the mw_astro directory. That project's

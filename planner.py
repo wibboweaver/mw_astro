@@ -116,8 +116,8 @@ def persist_framing(field, component_field):
         st.session_state["settings_save_error"] = f"Settings could not be saved: {exc}"
 
 
-def persist_esa_rotation():
-    value=st.session_state.get('esa_camera_framing',{}).get('rotation')
+def persist_esa_rotation(component_key='esa_camera_framing'):
+    value=st.session_state.get(component_key,{}).get('rotation')
     if value is not None:
         try:
             save_settings_changes(frame_rotation_deg=float(value))
@@ -432,18 +432,30 @@ with chart_column:
     render_planner(target, settings, start, exposure, horizon_profile, chart_selection, frame["Time"].iloc[0], frame["Time"].iloc[-1], moon_data=moon_data, cloud_data=cloud_data,night_rating=rating,session_suggestion=session_suggestion)
 
 if image_column is not None:
-    requested_fov = preview_fov(target.object_id) if image_field == "Fit target" else float(image_field.rstrip("°"))
-    fov = fit_preview_field(requested_fov, focal_length, sensor_width, sensor_height)
     with image_column:
         import esa_preview
         if esa_preview._loaded_source_stamp != (Path(esa_preview.__file__).stat().st_mtime_ns,Path(esa_preview.__file__).with_suffix('.js').stat().st_mtime_ns):
             importlib.reload(esa_preview)
-        preview_key=(target.object_id,target.ra_deg,target.dec_deg)
-        fields=st.session_state.setdefault('esa_preview_fields',{})
-        fov=fields.setdefault(preview_key,fov)
-        data=esa_preview.esa_preview_data(target.ra_deg,target.dec_deg,focal_length,sensor_width,sensor_height,fov,
-            settings.frame_rotation_deg,int(camera_width),int(camera_height),view_key=f'{target.ra_deg}:{target.dec_deg}')
-        esa_preview.render_esa_preview(data,on_rotation_change=lambda:persist_esa_rotation())
+        def render_target_preview(preview_target, component_key):
+            requested_fov = preview_fov(preview_target.object_id) if image_field == "Fit target" else float(image_field.rstrip("°"))
+            fov = fit_preview_field(requested_fov, focal_length, sensor_width, sensor_height)
+            preview_key=(preview_target.object_id,preview_target.ra_deg,preview_target.dec_deg)
+            fields=st.session_state.setdefault('esa_preview_fields',{})
+            fov=fields.setdefault(preview_key,fov)
+            data=esa_preview.esa_preview_data(preview_target.ra_deg,preview_target.dec_deg,focal_length,sensor_width,sensor_height,fov,
+                settings.frame_rotation_deg,int(camera_width),int(camera_height),view_key=f'{preview_target.ra_deg}:{preview_target.dec_deg}')
+            esa_preview.render_esa_preview(data,key=component_key,
+                on_rotation_change=lambda:persist_esa_rotation(component_key))
+
+        if comparison_name:
+            preview_targets = [target, visible_targets[names.index(comparison_name)]]
+            image_tabs = st.tabs(selected_names, key='target_image_tabs')
+            for preview_target, image_tab, component_key in zip(preview_targets, image_tabs,
+                    ('esa_camera_framing', 'esa_camera_framing_comparison')):
+                with image_tab:
+                    render_target_preview(preview_target, component_key)
+        else:
+            render_target_preview(target, 'esa_camera_framing')
         st.markdown(night_description)
         with st.expander('Chart legend', expanded=False):
             legend_items = (

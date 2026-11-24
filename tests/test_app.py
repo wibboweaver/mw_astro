@@ -131,6 +131,71 @@ def esa_payload(app):
                 if 'esa_dss2_preview' in item.proto.component_name)
 
 
+def preview_payloads(element):
+    import json
+    return [json.loads(item.proto.json) for item in element.get('bidi_component')
+            if 'esa_dss2_preview' in item.proto.component_name]
+
+
+def send_preview_state(app, view_key, value):
+    import json
+    preview = next(item for item in app.get('bidi_component')
+                   if 'esa_dss2_preview' in item.proto.component_name and json.loads(item.proto.json)['view_key'] == view_key)
+    states = app._tree.get_widget_states()
+    retained = [state for state in states.widgets if state.id != preview.proto.id]
+    del states.widgets[:]
+    states.widgets.extend(retained)
+    states.widgets.add(id=preview.proto.id).json_value = json.dumps(value)
+    return app._run(states)
+
+
+def test_two_selected_targets_have_named_image_tabs_and_single_target_has_no_tabs():
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        assert not app.exception and not app.main.tabs
+        select_targets(app, ['Fixture low'])
+        original = esa_payload(app)
+        select_targets(app, ['Fixture low', 'Fixture high'])
+        assert not app.exception
+        assert [tab.label for tab in app.main.tabs] == ['Fixture low', 'Fixture high']
+        assert preview_payloads(app.main.tabs[0]) == [original]
+        assert preview_payloads(app.main.tabs[1])[0]['view_key'] == '20:50'
+        assert len(preview_payloads(app)) == 2
+        assert len(chart_frames(app)) == 1
+        app.run()
+        assert not app.exception
+        assert [tab.label for tab in app.main.tabs] == ['Fixture low', 'Fixture high']
+        select_targets(app, ['Fixture high'])
+        assert not app.exception and not app.main.tabs
+        assert len(preview_payloads(app)) == 1
+        assert esa_payload(app)['view_key'] == '20:50'
+
+
+def test_preview_tabs_keep_independent_centres_and_secondary_rotation_persists():
+    import configuration
+    configuration.save_settings_changes(minimum_altitude_deg=40, show_preview=True)
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('visibility.calculate_tracks', side_effect=fake_tracks):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        select_targets(app, ['Fixture low'])
+        select_targets(app, ['Fixture low', 'Fixture high'])
+        original_chart = chart_payload(app)
+        rotation = configuration.load_settings().frame_rotation_deg
+        primary_centre = dict(view_key='10:40', ra=11, dec=41)
+        comparison_centre = dict(view_key='20:50', ra=21, dec=51)
+        send_preview_state(app, '10:40', dict(rotation=rotation, centre=primary_centre))
+        send_preview_state(app, '20:50', dict(rotation=rotation, centre=comparison_centre))
+        assert not app.exception
+        assert app.session_state['esa_camera_framing']['centre'] == primary_centre
+        assert app.session_state['esa_camera_framing_comparison']['centre'] == comparison_centre
+        send_preview_state(app, '20:50', dict(rotation=97, centre=comparison_centre))
+        assert not app.exception
+        assert configuration.load_settings().frame_rotation_deg == 97
+        assert [payload['rotation'] for payload in preview_payloads(app)] == [97, 97]
+        assert app.session_state['esa_camera_framing']['centre'] == primary_centre
+        assert app.session_state['selected_targets'] == ['Fixture low', 'Fixture high']
+        assert chart_payload(app) == original_chart
+
+
 def test_esa_preview_uses_tiles_without_requesting_cutouts():
     with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('reference_images.fetch_preview') as fetch:
         app = AppTest.from_file(APP, default_timeout=20).run()

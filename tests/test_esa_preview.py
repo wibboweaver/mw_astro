@@ -17,6 +17,69 @@ def test_payload_has_independent_survey_and_tangent_plane_geometry():
     assert data['pixel_scale_height']==pytest.approx(data['pixel_scale_width'])
 
 
+def test_hidden_tab_waits_for_visibility_and_viewers_keep_separate_state(tmp_path):
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node is required for component interaction tests')
+    source = Path(__file__).resolve().parents[1].joinpath('esa_preview.js').read_text()
+    source = source.replace('export default function(component)', 'function render(component)')
+    source = source.replace('await loadAladin(state.data.module_url)', 'await mockLoad()')
+    harness = r'''
+const assert=require('node:assert/strict');
+const observers=[],viewers=[],storage=new Map();
+const sessionStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+class ResizeObserver{
+ constructor(callback){this.callback=callback;observers.push(this);}
+ observe(element){this.element=element;}
+ disconnect(){this.disconnected=true;}
+}
+function root(width){
+ const elements=new Map(),box={width};
+ box.find=id=>{
+  if(!elements.has(id))elements.set(id,{attrs:{},style:{setProperty(){}},classList:{toggle(){}},
+   setAttribute(k,v){this.attrs[k]=v},getBoundingClientRect:()=>({width:box.width,height:400}),
+   addEventListener(){},appendChild(){},showModal(){this.open=true},close(){this.open=false;}});
+  return elements.get(id);
+ };
+ box.querySelector=selector=>box.find(selector.slice(1));return box;
+}
+const A={imageHiPS:url=>url,aladin:(element,options)=>{
+ const viewer={position:[],fields:[],gotoRaDec(...position){this.position=position},getRaDec(){return this.position},
+  setFoV(value){this.fields.push(value)},setFoVRange(){},setRotation(){},on(){}};
+ viewers.push(viewer);return viewer;
+}};
+const mockLoad=async()=>A,fetch=async()=>({ok:true});
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const data={ra:10,dec:40,survey:'survey',module_url:'module',pixel_scale_width:1,pixel_scale_height:1,
+ image_field:5,width:300,height:200,fov_width:2,fov_height:1,rotation:0,camera_width_px:6000,camera_height_px:4000,view_key:'A'};
+'''
+    checks = r'''
+(async()=>{
+ const first=root(400),second=root(0),events=[[],[]];
+ const primary={parentElement:first,data,setStateValue:(...value)=>events[0].push(value)};
+ const comparison={parentElement:second,data:{...data,ra:20,dec:50,view_key:'B'},setStateValue:(...value)=>events[1].push(value)};
+ const cleanupFirst=render(primary),cleanupSecond=render(comparison);await flush();
+ assert.equal(viewers.length,1,'hidden preview must not initialise at zero width');
+ assert.deepEqual(viewers[0].position,[10,40]);
+ assert.equal(events[1].length,0);
+ second.width=400;observers[1].callback();await flush();
+ assert.equal(viewers.length,2);assert.deepEqual(viewers[1].position,[20,50]);
+ assert.deepEqual(events[0].at(-1),['centre',{view_key:'A',ra:10,dec:40}]);
+ assert.deepEqual(events[1].at(-1),['centre',{view_key:'B',ra:20,dec:50}]);
+ events[0].length=0;events[1].length=0;
+ second.find('angle').value=85;second.find('angle').oninput();second.find('angle').onchange();
+ assert.deepEqual(events[1],[['rotation',85]]);assert.equal(events[0].length,0);
+ assert.equal(first.find('camera-frame').attrs.transform,'rotate(0 300 300)');
+ observers[1].callback();await flush();assert.equal(viewers.length,2);
+ cleanupSecond();cleanupFirst();assert.ok(observers.every(observer=>observer.disconnected));
+})().catch(error=>{console.error(error);process.exit(1)});
+'''
+    script = tmp_path / 'tabs.js'
+    script.write_text(harness + source + checks)
+    result = subprocess.run([node, str(script)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize('ra,dec',[(float('nan'),0),(360,0),(-1,0),(10,91),(10,float('inf'))])
 def test_invalid_coordinates_are_rejected(ra,dec):
     with pytest.raises(ValueError):

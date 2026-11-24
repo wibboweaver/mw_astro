@@ -59,7 +59,7 @@ def esa_preview_component():
     button{background:transparent;color:inherit;border:1px solid #8887;border-radius:6px;padding:5px 10px;cursor:pointer}''',js=Path(__file__).with_suffix('.js').read_text())
 
 
-def render_esa_preview(data,on_rotation_change):
-    return esa_preview_component()(data=data,key='esa_camera_framing',default={'rotation':data['rotation']},on_rotation_change=on_rotation_change,on_centre_change=lambda:None)
+def render_esa_preview(data,on_rotation_change,key='esa_camera_framing'):
+    return esa_preview_component()(data=data,key=key,default={'rotation':data['rotation']},on_rotation_change=on_rotation_change,on_centre_change=lambda:None)
 
 _loaded_source_stamp=(Path(__file__).stat().st_mtime_ns,Path(__file__).with_suffix('.js').stat().st_mtime_ns)

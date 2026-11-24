@@ -2,6 +2,8 @@
 
 ## 2026-11-24
 
+- Show a named image-preview tab for each of two selected objects, with
+  independent framing centres and deferred loading of the hidden preview.
 - Simplify chart controls and add taller Clear objects / Clear timelines buttons.
   Show paired duration (HH:MM), image count and object size readouts; the second
   object's bracketed duration and count use timelines 2–3.

@@ -88,7 +88,7 @@ export default function(component) {
   };
   const failed=error=>{if(!state.disposed){status.textContent='ESA DSS2 colour preview could not load. Check your connection and retry.';retry.hidden=false;console.error('ESA DSS2 preview:',error);}};
   const initialise=async()=>{
-    if(state.pending||state.disposed)return;
+    if(state.pending||state.disposed||find('sky-frame').getBoundingClientRect().width===0)return;
     if(state.viewer){if(state.key!==state.data.view_key)centre();return;}
     state.pending=true;status.textContent='Loading ESA DSS2 colour survey…';retry.hidden=true;
     try{
@@ -113,6 +113,11 @@ export default function(component) {
     try{await checkProvider();state.viewer.setBaseImageLayer(state.data.survey);centre();}
     catch(error){failed(error);}finally{state.pending=false;}
   };
+  // Hidden image tabs must wait until their container has a usable width.
+  if(!state.visibilityObserver&&typeof ResizeObserver!=='undefined'){
+    state.visibilityObserver=new ResizeObserver(()=>{if(!state.viewer)initialise();});
+    state.visibilityObserver.observe(find('sky-frame'));
+  }
   initialise();
-  return ()=>{clearTimeout(state.centreTimer);state.disposed=true;if(dialog.open)dialog.close();instances.delete(root);};
+  return ()=>{clearTimeout(state.centreTimer);state.visibilityObserver?.disconnect();state.disposed=true;if(dialog.open)dialog.close();instances.delete(root);};
 }
