@@ -13,7 +13,7 @@ def test_click_markers_exist_before_resize_and_survive_redraw(tmp_path):
     frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
     first=frame.Time[0].timestamp()*1000
     segments=[dict(start=first+i*14400000,end=first+(i+1)*14400000,percent=value) for i,value in enumerate([0,50,100])]
-    content=chart_html(frame,40,'Europe/London',cloud_forecast=dict(segments=segments,precipitation_segments=segments))
+    content=chart_html(frame,40,'Europe/London',cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
     script=content.split('<script>')[1].split('</script>')[0]
     source=tmp_path/'chart.js';source.write_text(script)
     harness=r'''
@@ -62,6 +62,13 @@ resize();assert.equal(markers().length,2);
 plot.handlers.pointermove({clientX:700,clientY:100});
 assert.equal(get('duration').textContent,duration);
 assert.equal(events.at(-1).points.length,2);
+assert.equal(get('choose-intervals').disabled,false);
+get('choose-intervals').handlers.click();
+assert.deepEqual(Array.from(events.at(-1).points),[Date.parse('2026-11-18T19:00Z'),Date.parse('2026-11-18T20:00Z')]);
+assert.equal(markers().length,2);
+get('clear-interval').handlers.click();
+assert.equal(markers().length,0);
+assert.equal(events.at(-1).points.length,0);
 '''
     subprocess.run([node,'-e',harness,str(source)],check=True,capture_output=True,text=True)
 
@@ -86,3 +93,41 @@ component.data.html='changed chart';const cleanup=ctx.render(component);
 assert.equal(reloads,2);cleanup();assert.equal(listeners.size,0);
 '''
     subprocess.run([node,'-e',harness,str(source)],check=True,capture_output=True,text=True)
+
+
+def test_comparison_path_keeps_primary_readout_and_interval_on_redraw(tmp_path):
+    node=shutil.which('node')
+    if not node:pytest.skip('Node required')
+    frame=pd.DataFrame({'Time':pd.to_datetime(['2026-11-18T18:00Z','2026-11-19T06:00Z']),'Altitude (°)':[50,60],'Azimuth (°)':[90,100]})
+    comparison=frame.assign(**{'Altitude (°)':[20,30]})
+    content=chart_html(frame,40,'Europe/London',primary_name='A',comparison_frame=comparison,comparison_name='B')
+    source=tmp_path/'comparison.js';source.write_text(content.split('<script>')[1].split('</script>')[0])
+    harness=r'''
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+class Element {
+ constructor(){this.children=[];this.attrs={};this.handlers={};this.style={};this.checked=true;this.textContent='';}
+ setAttribute(k,v){this.attrs[k]=v;}
+ append(e){this.children.push(e);}
+ replaceChildren(){this.children=[];}
+ getBoundingClientRect(){return {left:0,top:0,width:900,height:335};}
+ addEventListener(k,fn){this.handlers[k]=fn;}
+}
+const elements={};const get=id=>elements[id]??(elements[id]=new Element());let resize;const events=[];
+const ctx={Intl,console,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},sessionStorage:{getItem:()=>null,setItem:()=>{}},window:{parent:{postMessage:e=>events.push(e)}},ResizeObserver:class{constructor(cb){resize=cb;}observe(){}}};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),ctx);
+const plot=get('plot');
+const secondary=()=>plot.children.filter(e=>e.attrs['data-secondary-target']==='B');
+assert.equal(secondary().length,1);
+assert.equal(secondary()[0].attrs.stroke,'#19b38c');
+assert.equal(secondary()[0].attrs['stroke-dasharray'],'6 3');
+assert.equal(get('comparison-legend').children[0].textContent,'A (Primary)');
+assert.match(get('comparison-legend').children[1].textContent,/B/);
+assert.match(get('alt').textContent,/50/);
+plot.handlers.click({clientX:200,clientY:100});plot.handlers.click({clientX:400,clientY:100});
+const interval=JSON.stringify(events.at(-1).points);resize();assert.equal(secondary().length,1);
+assert.equal(JSON.stringify(events.at(-1).points),interval);
+get('show-object').checked=false;get('show-object').onchange();assert.equal(secondary().length,0);
+get('show-object').checked=true;get('show-object').onchange();assert.equal(secondary().length,1);
+'''
+    result = subprocess.run([node,'-e',harness,str(source)],capture_output=True,text=True)
+    assert result.returncode == 0, result.stderr

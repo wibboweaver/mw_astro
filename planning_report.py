@@ -15,7 +15,7 @@ def clean(value):
     return str(value).replace('|',r'\|').replace('\n',' ').replace('<','&lt;').replace('>','&gt;')
 
 
-def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre=None,night_rating=None):
+def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre=None,night_rating=None, suggested_parameters=None):
     from astropy.coordinates import SkyCoord
     import astropy.units as u
     coord=SkyCoord(target.ra_deg*u.deg,target.dec_deg*u.deg)
@@ -44,6 +44,31 @@ def markdown_report(plan,target,settings,assessment,cloud_data=None,frame_centre
         first=datetime.fromtimestamp(night_rating['start'],plan.start.tzinfo)
         last=datetime.fromtimestamp(night_rating['end'],plan.start.tzinfo)
         lines += [f'Rated window: {first:%d %b %Y %H:%M}–{last:%d %b %Y %H:%M %Z}. This is the object’s best rated window within the chart range; it may differ from the selected capture interval.','']
+    if suggested_parameters is None:
+        from session_suggestion import parameters_for_window
+        from planning import load_rules
+        suggested_parameters = parameters_for_window(plan, target, settings, load_rules())
+    suggested = suggested_parameters
+    session_rows = [
+        ('Exposure count', str(suggested['exposure_count'])),
+        ('Exposure interval', f"{plan.exposure_seconds:g} seconds per exposure"),
+        ('Filter type', suggested['filter_type']),
+        ('Selected window', f"{plan.start:%d %b %Y %H:%M %Z} – {plan.end:%d %b %Y %H:%M %Z}"),
+        ('Expected integration', duration(suggested['exposure_count'] * plan.exposure_seconds)),
+        ('Overhead allowance', duration(suggested['overhead_seconds'])),
+    ]
+    lines += ['## Suggested Session Parameters', '', '| Parameter | Suggested value |', '|---|---|']
+    lines += [f'| {key} | {clean(value)} |' for key, value in session_rows]
+    lines += ['', 'Exposure count allows for configured setup, autofocus, downloads, dithering and a meridian flip when expected. It is the number that fits this window, not a target-specific image-quality guarantee.', '']
+    if suggested.get('mandatory_rules'):
+        lines += ['Mandatory rules passed (not rated): ' + ', '.join(key.replace('_', ' ') for key in suggested['mandatory_rules']) + '.', '']
+    if suggested.get('weights'):
+        names = {'integration': 'Integration', 'altitude': 'Altitude', 'transit': 'Transit',
+                 'moon': 'Moon', 'cloud': 'Cloud', 'precipitation': 'Precipitation', 'start_time': 'Start time', 'astronomical_night': 'Astronomical night', 'horizon': 'Horizon clearance'}
+        applied = ', '.join(f"{names[key]} {value*100:g}%" for key, value in suggested['weights'].items())
+        lines += ['Relative selection weights used: ' + applied + '. Preference score, not a success probability.', '']
+    if suggested.get('message'):
+        lines += [clean(suggested['message']), '']
     lines += ['## Capture Information (NINA)','','| Setting | Planned value |','|---|---|']
     lines += [f'| {key} | {clean(value)} |' for key,value in rows]
     lines += ['', guidance_markdown(target.object_id, heading='##'), '']

@@ -5,7 +5,7 @@
 *{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;color:var(--ink);background:transparent}
 svg{display:block;width:100%;height:375px;touch-action:none;overflow:visible}
 text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
-.layers{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 2px 14px}.layers label{cursor:pointer}
+.layers[hidden]{display:none}.layers{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 2px 14px}.layers label{cursor:pointer}
 .cards{display:grid;grid-template-columns:1fr 1fr 1.3fr 3fr;gap:12px;margin:10px 2px 0}
 .card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;min-width:0}
 @media(max-width:650px){.cards{grid-template-columns:1fr 1fr}}
@@ -16,10 +16,12 @@ text{fill:var(--ink);font-size:11px} .grid{stroke:var(--grid)}
 .observation{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 2px 0}
 .actions{display:flex;align-items:center;gap:10px;margin:8px 2px;font-size:12px}
 button{background:transparent;color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
 #tip{position:absolute;display:none;pointer-events:none;background:var(--tip);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:13px}
 </style></head><body>
 <svg id="plot" role="img" aria-label="Target altitude and custom horizon versus local time"></svg>
 <div id="tip" role="tooltip"></div>
+<div id="comparison-legend" class="layers" aria-label="Selected targets" hidden></div>
 <div class="layers" aria-label="Chart layers">
 <label><input type="checkbox" id="show-horizon" checked> Local horizon</label>
 <label><input type="checkbox" id="show-object" checked> Object trajectory</label>
@@ -43,7 +45,7 @@ button{background:transparent;color:var(--ink);border:1px solid var(--border);bo
  <div class="card"><div class="label">Observation duration</div><div id="duration" class="value">—</div></div>
  <div class="card"><div class="label">Images (exposure only)</div><div id="images" class="value">—</div></div>
 </div>
-<div class="actions"><button id="clear-interval" type="button">Clear interval</button><span>Click twice on the chart to select an interval.</span></div>
+<div class="actions"><button id="choose-intervals" type="button">Choose intervals</button><button id="clear-interval" type="button">Clear interval</button><span id="interval-advice">Click twice on the chart to select an interval.</span></div>
 <script>
 __OBSERVATION_JS__
 const data=__CHART_DATA__;
@@ -53,7 +55,7 @@ document.getElementById('datetime-label').textContent=`Time (${data.timezone})`;
 document.getElementById('object-size').textContent=data.object_size;
 let selectedTime=data.times[0], width;
 const plotTop=15,bottom=285,left=55,right=15,cloudTop=292,cloudBottom=310,precipTop=cloudBottom+4,precipBottom=precipTop+18;
-const low=Math.min(0,...data.alt,...(data.horizon||[])), high=Math.max(90,...data.alt,data.minimum,...(data.horizon||[]));
+const low=Math.min(0,...data.alt,...(data.comparison?.alt||[]),...(data.horizon||[])), high=Math.max(90,...data.alt,...(data.comparison?.alt||[]),data.minimum,...(data.horizon||[]));
 const minY=Math.floor(low/10)*10,maxY=Math.ceil(high/10)*10;
 const t0=data.times[0], t1=data.times.at(-1);
 const storageKey=`mw-astro-interval:${data.target_key}:${t0}:${t1}`;
@@ -63,13 +65,20 @@ const layerKey='mw-astro-chart-layers', layerNames=['horizon','object','minimum'
 try{const saved=JSON.parse(sessionStorage.getItem(layerKey));for(const name of layerNames){if(typeof saved?.[name]==='boolean')document.getElementById('show-'+name).checked=saved[name];}}catch(_){}
 if(!data.horizon)document.getElementById('show-horizon').disabled=true;
 
+const comparisonLegend=document.getElementById('comparison-legend');
+if(data.comparison){
+ comparisonLegend.hidden=false;
+ for(const [name,colour,role] of [[data.primary_name,'#4c9be8','Primary'],[data.comparison.name,'#19b38c','Comparison · dashed']]){
+  const item=document.createElement('span');item.style.color=colour;item.textContent=`${name} (${role})`;comparisonLegend.append(item);
+ }
+}
 const visible=name=>document.getElementById('show-'+name).checked;
 let intervalGroup;
 const x=t=>left+(t-t0)/(t1-t0)*(width-left-right);
 const y=a=>bottom-(a-minY)/(maxY-minY)*(bottom-plotTop);
 function el(tag,attrs,parent=svg){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);parent.append(e);return e;}
 function text(value,attrs){const e=el('text',attrs);e.textContent=value;return e;}
-function path(values,color,dash){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(data.times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
+function path(values,color,dash,times=data.times){return el('path',{d:values.map((a,i)=>(i?'L':'M')+x(times[i])+','+y(a)).join(' '),fill:'none',stroke:color,'stroke-width':2,...(dash?{'stroke-dasharray':dash}:{})});}
 const weatherRows=[
  {layer:'clouds',label:'Cloud',key:'segments',top:cloudTop,bottom:cloudBottom,attribute:'data-cloud-cover',unavailable:'data-cloud-unavailable',description:'Cloud cover'},
  {layer:'precip',label:'Precip.',key:'precipitation_segments',top:precipTop,bottom:precipBottom,attribute:'data-precip-probability',unavailable:'data-precip-unavailable',description:'Precipitation probability'}
@@ -125,7 +134,15 @@ function draw(){
  for(let i=0;i<=ticks;i++){const t=t0+(t1-t0)*i/ticks;text(timeFormat.format(t),{x:x(t),y:357,'text-anchor':i===0?'start':i===ticks?'end':'middle'});}
  if(visible('minimum'))el('line',{x1:left,x2:width-right,y1:y(data.minimum),y2:y(data.minimum),stroke:'#e69520','stroke-width':2,'stroke-dasharray':'2 4'});
  if(data.horizon&&visible('horizon'))path(data.horizon,'#c44e52');
- if(visible('object'))path(data.alt,'#4c9be8');
+ if(visible('object')){
+  path(data.alt,'#4c9be8');
+  if(data.comparison){
+   const comparison=path(data.comparison.alt,'#19b38c','6 3',data.comparison.times);
+   comparison.setAttribute('data-secondary-target',data.comparison.name);
+   comparison.setAttribute('pointer-events','none');
+   el('title',{},comparison).textContent=data.comparison.name+' (comparison)';
+  }
+ }
  if(visible('moonlight'))for(const period of data.moon_interference||[]){
   const beginning=Math.max(t0,period.start),ending=Math.min(t1,period.end);
   if(ending>beginning)el('rect',{'data-moon-interference':period.level,x:x(beginning),y:bottom-8,width:x(ending)-x(beginning),height:8,fill:'#ffff00','fill-opacity':0.9,'pointer-events':'none'});
@@ -188,6 +205,17 @@ svg.addEventListener('click',event=>{
  const instant=Math.max(t0,Math.min(t1,Math.round((t0+(px-left)/(width-left-right)*(t1-t0))/1000)*1000));
  boundaries=Observation.select(boundaries,instant,t0,t1);
  saveInterval();renderInterval();
+});
+const chooseButton=document.getElementById('choose-intervals');
+const suggested=data.suggested_interval;
+const validSuggestion=Array.isArray(suggested?.points)&&suggested.points.length===2&&suggested.points.every(Number.isFinite)&&suggested.points[0]>=t0&&suggested.points[1]<=t1&&suggested.points[0]<suggested.points[1];
+chooseButton.disabled=!validSuggestion;
+chooseButton.title=suggested?.message||'No suggested interval is available.';
+if(!validSuggestion&&suggested?.message)document.getElementById('interval-advice').textContent=suggested.message;
+chooseButton.addEventListener('click',()=>{
+ if(!validSuggestion)return;
+ boundaries=suggested.points.slice();saveInterval();renderInterval();
+ document.getElementById('interval-advice').textContent=suggested.message||'Suggested capture interval selected.';
 });
 document.getElementById('clear-interval').addEventListener('click',()=>{boundaries=[];saveInterval();renderInterval();});
 svg.addEventListener('pointermove',event=>{

@@ -13,5 +13,5 @@ are interpolated, not assumed clear. Example.txt contains the supplied example
 points, not a measured horizon for your site.
 
 Selecting a file changes the obstruction profile only. Set geographic
-latitude, longitude and height separately in the sidebar or config.toml.
+latitude, longitude and height separately in the sidebar or config.json.
 The chart shows the horizon altitude in the target's direction at each time.

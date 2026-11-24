@@ -124,3 +124,14 @@ def test_moon_card_has_three_ordered_sections():
     html=chart_html(frame,40,'Europe/London')
     assert html.index('id="moon-phase"')<html.index('id="moon-distance"')<html.index('id="moon-illumination"')<html.index('id="moon-phase-name"')<html.index('id="moon-rating"')
     assert "document.getElementById('moon-phase-name').textContent=phase.name" in html
+
+
+def test_choose_intervals_button_precedes_clear_and_carries_suggestion():
+    frame = pd.DataFrame({'Time': pd.to_datetime(['2026-11-21T18:00Z', '2026-11-22T06:00Z']), 'Altitude (°)': [50, 60], 'Azimuth (°)': [90, 100]})
+    first, last = [int(stamp.timestamp()*1000) for stamp in frame.Time]
+    suggestion = dict(points=[first+3600000, last-3600000], message='Cloud forecast missing; verify conditions.')
+    html = chart_html(frame, 40, 'Europe/London', suggested_interval=suggestion)
+    payload = json.JSONDecoder().raw_decode(html.split('const data=', 1)[1])[0]
+    assert payload['suggested_interval'] == suggestion
+    assert html.index('id="choose-intervals"') < html.index('id="clear-interval"')
+    assert 'chooseButton.disabled=!validSuggestion' in html

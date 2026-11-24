@@ -5,13 +5,20 @@ from pathlib import Path
 import pandas as pd
 
 
-def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=()):
+def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=(), suggested_interval=None, primary_name="", comparison_frame=None, comparison_name=None):
     import math
     if not math.isfinite(exposure_seconds) or exposure_seconds <= 0:
         raise ValueError("Exposure must be positive and finite.")
     times = pd.to_datetime(frame["Time"], utc=True)
     payload = {
         "times": [int(t.timestamp() * 1000) for t in times],
+        "primary_name": primary_name,
+        "comparison": ({
+            "name": comparison_name,
+            "times": [int(t.timestamp() * 1000) for t in pd.to_datetime(comparison_frame["Time"], utc=True)],
+            "alt": comparison_frame["Altitude (°)"].tolist(),
+        } if comparison_frame is not None else None),
+        "suggested_interval": suggested_interval,
         "alt": frame["Altitude (°)"].tolist(),
         "az": frame["Azimuth (°)"].tolist(),
         "cloud_forecast": cloud_forecast,

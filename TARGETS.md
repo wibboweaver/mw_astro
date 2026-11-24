@@ -17,8 +17,8 @@ Throughout window: every sample clear. Touching an obstruction is excluded.
 No custom profile means a flat 0-degree horizon. These are sampled tests and
 do not guarantee uninterrupted clearance between samples.
 
-All candidates are tested before limiting the list to `[targets].max_objects`
-(default 100) in config.toml. `[chart].step_minutes` controls the visibility
+All candidates are tested before limiting the list to `targets.max_objects`
+(default 100) in config.json. `chart.step_minutes` controls the visibility
 check and chart sampling interval (1–60 minutes; default 10). Results are ranked
 by most qualifying samples, then peak altitude, then name. This is visibility
 ranking only, not a measure of photographic brightness or field-of-view fit.
@@ -56,7 +56,7 @@ IDs. Time below the chart is HH:MM in the configured local timezone.
 
 ## Saved sidebar settings
 
-Sidebar changes are written immediately to config.toml. New sessions restore
+Sidebar changes are written immediately to config.json. New sessions restore
 latitude/longitude, horizon filename, evening date, start hour AND minute,
 minimum altitude, visibility mode, catalogue source/scope, preview toggle and
 image field of view. Elevation remains available as observatory.height_m in
@@ -119,7 +119,7 @@ existing automatic config saving, twilight calculation and image-count updates.
 
 The table below the chart lists the same qualifying targets as the dropdown, in A–Z order. It includes catalogue ID, published common name (or dropdown label), next upper meridian transit after the sidebar start time (local HH:MM), angular size, classification, distance, and J2000 RA/Dec. Transit uses apparent coordinates and sidereal time, independently of the chart sampling interval. The bundled OpenNGC files have no distance column: distances remain Unavailable, without inferring them from redshift. Unknown custom targets retain their names and coordinates with unavailable catalogue metadata. Table calculations are cached so selecting a different target does not recalculate the entire list.
 
-Sidebar controls are grouped into Plan, Site, Targets and Frame tabs. Frame accepts effective focal length, physical sensor width/height in millimetres, and camera width/height in pixels. Defaults are 550 mm, 23.5 × 15.7 mm, and 6248 × 4176 pixels for the Z4/ASI2600. Pixel dimensions describe the full sensor readout; they do not alter angular coverage. Physical field is 2 atan(sensor dimension / (2 focal length)). The rectangle uses the DSS2 TAN projection at its target centre. Dragging translates the image beneath the fixed frame immediately, with no network calls. The displayed survey is a finite cutout: moving it far enough exposes its edges; a larger Image field of view requests more sky. The image offset is remembered for each target and cutout size within the browser session, including across rotation changes. Centre image resets that offset. There are no direction labels or zoom controls. Rotation redraws locally during input and saves on release. Equipment and rotation persist in config.toml; obsolete frame_zoom entries are ignored. Sensor dimensions and rotation do not replace the selected target coordinates with new pointing coordinates. Initial field fits the padded diagonal at all rotations, up to the existing 10° service limit.
+Sidebar controls are grouped into Plan, Site, Targets and Frame tabs. Frame accepts effective focal length, physical sensor width/height in millimetres, and camera width/height in pixels. Defaults are 550 mm, 23.5 × 15.7 mm, and 6248 × 4176 pixels for the Z4/ASI2600. Pixel dimensions describe the full sensor readout; they do not alter angular coverage. Physical field is 2 atan(sensor dimension / (2 focal length)). The rectangle uses the DSS2 TAN projection at its target centre. Dragging translates the image beneath the fixed frame immediately, with no network calls. The displayed survey is a finite cutout: moving it far enough exposes its edges; a larger Image field of view requests more sky. The image offset is remembered for each target and cutout size within the browser session, including across rotation changes. Centre image resets that offset. There are no direction labels or zoom controls. Rotation redraws locally during input and saves on release. Equipment and rotation persist in config.json; obsolete frame_zoom entries are ignored. Sensor dimensions and rotation do not replace the selected target coordinates with new pointing coordinates. Initial field fits the padded diagonal at all rotations, up to the existing 10° service limit.
 
 The visible-target table is now the selector, above the charts; the dropdown is removed. Select one row to update the altitude plot, DSS2 image, framing and filter recommendation. The table supports column sorting, search and CSV export. Row identities remain tied to original data positions even after client-side sorting. Changes to the eligible list reset stale indices and retain the chosen target by name if still visible, otherwise select the first A–Z target. Clearing the selected row hides the chart until another is selected. Streamlit 1.66 or later is required for the initial highlighted row.
 
@@ -146,7 +146,7 @@ warning acknowledgement and accepted-plan JSON export have been removed.
 Frame coverage and Object pixels estimate catalogue major/minor dimensions on
 the full uncropped sensor, assuming the object's long side aligns with the
 camera's long side. These are composition estimates, not resolved detail.
-`[targets].min_frame_coverage_percent` defaults to 15: at least one dimension
+`targets.min_frame_coverage_percent` defaults to 15: at least one dimension
 must cover this percentage of its corresponding sensor dimension to pass the
 report's Frame fit criterion. Small targets remain listed. Missing dimensions
 are Unknown; objects exceeding the frame get a separate containment warning.
@@ -162,13 +162,13 @@ windows above both altitude and horizon limits during astronomical darkness.
 Score each complete window, then use its highest score (longest on ties).
 The rating therefore describes the displayed rated window, not the whole night.
 
-`[night_rating]` holds relative visibility/Moon/frame weights (30/15/25)
+`night_rating` holds relative visibility/Moon/frame weights (30/15/25)
 and `preferred_window_minutes` (120). Visibility reaches full credit at that
 continuous duration.
 Moon credit uses configured interference rules (possible half penalty, strong
-full penalty); frame credit reaches full at `[night_rating].preferred_frame_coverage_percent`
+full penalty); frame credit reaches full at `night_rating.preferred_frame_coverage_percent`
 (default 50%), using `frame_curve_exponent` (default 1, linear). Below
-`[targets].min_frame_coverage_percent` (default 15%), `undersized_score_cap`
+`targets.min_frame_coverage_percent` (default 15%), `undersized_score_cap`
 limits the overall score (default 60; use 100 to disable).
 Catalogue size uncertainty also applies to frame credit. Missing required Moon or size data gives Unknown. No usable dark window scores zero.
 Rain risk is the maximum hourly probability in the rated window and is displayed
@@ -188,7 +188,7 @@ Total chart coverage interval; Rain risk is its maximum hourly precipitation
 probability. Both are identical for every target, independent of missing object
 ratings. Report weather uses only the chosen start/stop interval. Night rating, Cloud cover and Rain risk
 use compact graphical bars; missing data is unknown rather than zero.
-Adjust `[night_rating]` weights to change the relative importance of clear
+Adjust `night_rating` weights to change the relative importance of clear
 continuous duration, Moon interference and full-frame object footprint.
 All weights are normalised to their sum. The score remains a preference aid.
 
@@ -224,12 +224,133 @@ Broadband versus narrowband is separate from choosing sub-exposure length.
 
 ## Earth-rotation data
 
-Astronomy calculations share a local IERS table, retaining refreshed data for
-the running process. Offline planning tolerates stale predictions with a visible
-warning; dates outside table coverage also produce a reduced-accuracy notice.
-These notices appear in exported plans. This is planning guidance, not precision
-pointing. Expand Earth-rotation data and click Refresh Earth-rotation data when
-online to request current data from Astropy's official sources. A failed refresh
-retains local data. Refresh clears computed chart caches; unrelated settings and
-image files are unchanged. Restarting can require another refresh if only the
-older bundled table is selected, though Astropy can reuse its download cache.
+Astronomy calculations share a local IERS table. Once per app process, startup
+loads newer data from Astropy's download cache and checks the current epoch,
+downloading an update only when predictions are stale. Network requests use
+bounded timeouts. Offline planning retains local data with a visible warning
+when predictions are stale or selected dates exceed coverage; these notices also
+appear in exported plans. This is planning guidance, not precision pointing.
+A startup progress bar shows local loading, saved-data checks and update checks.
+Restart the app when online to retry after an offline startup. Startup checks are
+not repeated on every widget change. Updating the table clears computed chart
+caches; settings and image files are unchanged.
+
+
+## Sequence analyser
+
+Open Sequence analyser from the page navigation and use Browse for a NINA
+sequence to open an advanced-sequencer JSON export or instruction template.
+The sequence is a simplified tree. Each container shows Conditions, Items and
+Triggers, counted by actual entries. Hide empty containers in the sidebar is
+on by default; turn it off to show sections with zero children. Expand a
+group such as Deep sky OSC 1 to review its children. Message headings use their
+first line and expand to the full text with line breaks. Instruction details show
+relevant settings, including exposure, filter, binning, target and camera ramps.
+JSON IDs, collection wrappers, parent links and UI state are hidden. Default
+retry/error settings are omitted; non-default behaviour is shown in plain language.
+Conditions can be disabled to remove their execution limits from projections.
+
+Check Disable on any group, instruction or trigger to exclude it and every
+descendant from all calculations and projections. Inherited controls show
+Disabled by parent and cannot be overridden until that parent is re-enabled.
+Individual child disable choices remain in place when a parent is re-enabled.
+Choices are saved in the app's .sequence-analysis directory for the exact file
+contents and restored when the same file is reopened, including after restarts.
+A changed sequence file starts with its own choices. The NINA JSON is not edited.
+
+The app's Enabled/Disabled state reflects these analysis choices. Because NINA
+does not persist its runtime disabled state, steps without saved flags start
+enabled for analysis. A disabled flag explicitly present in JSON is respected.
+
+Every expandable heading includes a time, including Conditions, Items and
+Triggers sections. Conditions add zero execution time; their loop counts are
+already applied to child instruction totals. Triggers show action time per
+activation when known, with runtime frequency remaining variable. The Items
+section rolls up enabled child durations, using the longest branch for parallel
+execution. Unspecified durations remain Variable.
+
+The sequence time summary excludes disabled branches, includes fixed exposures,
+waits and nested fixed loops, and uses the longest branch in parallel groups.
+Saved progress and retry limits are not scheduled repetitions. Camera downloads,
+hardware overhead, runtime expressions, conditional loops and trigger firing
+cannot be reliably timed from JSON alone. Variable marks unquantified timing;
+≥ marks a known portion plus variable work. Configured camera cooling and warming
+durations are read in minutes and included as planning allowances. These show
+≈, since a camera already near its target can skip its ramp and regulation can
+take additional time; zero or dynamic durations remain Variable. Trigger actions are conditional;
+child timings and parent summaries must not be added together. The app does
+not execute NINA instructions, scripts or equipment commands.
+
+
+Sequence planning summaries:
+
+- Capture summary groups enabled exposures by target, filter, frame type and
+  exposure setting. Fixed loops set frame counts; Smart Exposure internals are
+  counted once. Lights and calibration exposure totals are separate. Trained
+  flats retain unknown exposure times, and dark flats are distinguished from
+  ordinary darks. Trigger captures are conditional and excluded from scheduled
+  totals. Runtime loop counts remain variable.
+- Projected finish uses the sidebar session date and start time in the configured
+  timezone. It adds known durations and camera ramp allowances; variable work
+  remains explicitly unestimated. Dates and clock changes are handled as elapsed
+  time. These controls do not alter the main planner settings.
+Disabled branches are excluded from all summaries.
+
+Sequence headings use Name: [Enabled] Time: HH:MM variable. Short durations retain
+seconds as HH:MM:SS. Estimated camera ramps are labelled estimated when no other
+variable work exists. A completely unknown duration displays --:-- variable.
+
+
+Choose intervals uses config.json session_selection.parameters. Every parameter
+has mode mandatory or relative. Mandatory rules have no weight and never receive
+a score: every rule must pass, and missing required data prevents a suggestion.
+Relative rules have normalised weights; zero disables their preference. An
+all-mandatory selection has no numeric rating. Actual local-horizon obstruction
+and the ability to fit a complete exposure always exclude a window.
+
+Defaults make astronomical night (Sun at/below -18 degrees), the chart minimum
+altitude and the configured horizon-clearance margin mandatory. Integration,
+transit, Moon, cloud, precipitation and start time are relative preferences.
+Changing a mandatory parameter to relative requires adding its weight. Remove
+the weight when changing to mandatory. Threshold details are documented beside
+each rule in config.json. Existing planning_rules supplies integration minima,
+horizon clearance, twilight bounds and normal start-hour limits.
+
+In non_automated sessions, relative start_time progressively favours earlier
+eligible dark time, with additional late/early-hours penalties. Automated sessions
+ignore this relative preference. A mandatory start_time must fall in the normal
+hours between planning_rules.timing.early_hours_end and late_start_hour.
+
+Mandatory integration requires both minimum_minutes and minimum_exposures.
+Mandatory transit requires it inside the selected window. Mandatory Moon requires
+available data and interference no greater than maximum_interference (after the
+dual-band sensitivity adjustment). Mandatory cloud/precipitation require complete
+forecasts with no value above maximum_percent. Relative versions apply weighted
+penalties and explicit unknown-condition assumptions instead of blocking capture.
+
+Candidates use a configurable endpoint grid plus geometry, forecast and transit
+boundaries. Exposure budgets include setup, autofocus, downloads, dithering and
+expected meridian-flip allowances. Reports separate mandatory rules passed from
+relative weights used. Scores express preference, not imaging success. The chart
+selection and report update automatically; manual selection remains available.
+
+The rig config section stores the supplied equipment inventory for future use.
+It is not displayed or used to change existing optical or planning settings.
+
+
+The active config is config.json. The migration preserved all site, chart,
+equipment, forecasting and rig values; JSON _description and _notes fields explain
+the selection rules. Legacy TOML import remains supported when an explicit .toml
+file is supplied to a loader. The application reads and writes config.json.
+
+The Image annotator page runs the separate Astro Annotate project from a sibling
+directory named astro-annotate. Its app.py, image_canvas component and own
+configuration must be present alongside the mw_astro directory. That project's
+source and saved configuration are not bundled in this repository. If the sibling
+project is absent, the page displays its expected location; other pages remain usable.
+
+In the FITS browser, Browse file shows only the selected file's categorised
+metadata. Browse folder shows a sortable table with one row per FITS file in that
+folder, followed by the selected file's categorised details. Subfolders are not
+included. Missing keywords appear blank, extension keywords have an HDU prefix,
+and unreadable files remain visible with a read error.

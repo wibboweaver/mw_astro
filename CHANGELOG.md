@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-11-24
+
+- Add a sortable FITS folder metadata table while preserving the separate
+  single-file categorised view, and remove the Original header cards section.
+- Allow a second selected planning target as a comparison trajectory.
+- Reject malformed configuration sections and handle whitespace-only sequence
+  messages without crashing the analyser.
+
+## 2026-11-21
+
+- Migrate active configuration to JSON, separate mandatory rules from relative
+  preferences, and favour earlier dark starts for non-automated sessions.
+
+- Replace Moon-first interval selection with configurable relative weights for
+  integration, altitude, transit, Moon, cloud, precipitation and start time.
+
+- Store the supplied rig inventory and add Choose intervals with automatic
+  report generation and Suggested Session Parameters.
+
+- Remove the sequence review checklist to keep the analyser focused on capture
+  summaries, timing and sequence structure.
+
+- Add compact capture and review summaries, session finish projections, and
+  consistent Name: [Enabled] Time: HH:MM headings to the sequence analyser.
+
+- Simplify the sequence tree into Conditions, Items and Triggers sections with
+  real entry counts, readable settings and complete multiline messages.
+
+- Include configured camera cooling and warming durations (minutes) in sequence
+  projections, marked as approximate allowances rather than guaranteed minima.
+
+- Add collapsible sequence groups and persistent disable choices for groups,
+  instructions and triggers. Exclude disabled branches from all projections.
+
+- Show Unknown when sequence JSON does not establish enabled status, rather
+  than incorrectly reporting Yes; label these timings as assuming enabled.
+
+- Add a Sequence analyser page for NINA advanced-sequencer JSON files, with
+  instruction/trigger names, enabled state, loop-aware timing and short notes.
+
+- Show startup data-check progress and remove the manual Earth-rotation panel.
+
+- Check Earth-rotation data once at startup, reuse newer cached data across
+  restarts, and refresh stale predictions automatically with an offline fallback.
+
 ## 2026-11-18
 
 - Shorten capture guidance to four target-specific answers: capture, combine,

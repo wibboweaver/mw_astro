@@ -1,4 +1,4 @@
-"""Validated application settings with atomic, comment-preserving persistence."""
+"""Validated JSON configuration with atomic persistence and legacy TOML import."""
 from dataclasses import dataclass, fields, replace
 from datetime import date
 from pathlib import Path
@@ -10,7 +10,7 @@ import re
 import tempfile
 from zoneinfo import ZoneInfo
 
-CONFIG_PATH = Path(__file__).with_name('config.toml')
+CONFIG_PATH = Path(__file__).with_name('config.json')
 VISIBILITY_MODES = ('During window', 'At start', 'Throughout window')
 TARGET_SOURCES = ('Automatic catalogue', 'Custom CSV')
 CATALOGUE_SCOPES = ('Named and Messier objects', 'All deep-sky objects')
@@ -95,19 +95,51 @@ class Settings:
         ZoneInfo(self.timezone)
 
 
-def load_settings(path=None):
-    import tomllib
+def read_config(path=None):
+    """Read the active JSON config, or an explicitly supplied legacy TOML file."""
     path = Path(path) if path is not None else CONFIG_PATH
-    with path.open('rb') as handle:
-        data = tomllib.load(handle)
+    if path.suffix.lower() == '.toml':
+        import tomllib
+        with path.open('rb') as handle:
+            data = tomllib.load(handle)
+    else:
+        def invalid_constant(value):
+            raise ValueError(f'Invalid JSON numeric constant: {value}')
+        data = json.loads(path.read_text(encoding='utf-8'), parse_constant=invalid_constant)
+    if not isinstance(data, dict):
+        raise ValueError('Configuration must be a JSON object.')
+    return data
+
+
+def load_settings(path=None):
+    data = read_config(path)
     values = {}
     for section, names in SECTIONS.items():
-        values.update({name: data.get(section, {})[name] for name in names if name in data.get(section, {})})
+        supplied = data.get(section, {})
+        if not isinstance(supplied, dict):
+            raise ValueError(f'Configuration section {section} must be an object.')
+        values.update({name: supplied[name] for name in names if name in supplied})
     return Settings(**values)
 
 
-def _updated_text(text, settings, changed):
+def _updated_text(text, settings, changed, json_format=False):
     """Update our scalar keys only; retain other sections, keys and comments."""
+    if json_format:
+        data = json.loads(text)
+        for section, names in SECTIONS.items():
+            updates = [name for name in names if name in changed]
+            if not updates:
+                continue
+            values = data.setdefault(section, {})
+            if not isinstance(values, dict):
+                raise ValueError(f'Configuration section {section} must be an object.')
+            for name in updates:
+                value = getattr(settings, name)
+                if value is None:
+                    values.pop(name, None)
+                else:
+                    values[name] = value
+        return json.dumps(data, indent=2, ensure_ascii=False, allow_nan=False) + chr(10)
     lines = text.splitlines()
     for section, names in SECTIONS.items():
         for name in names:
@@ -164,7 +196,7 @@ def save_settings_changes(path=None, **changes):
         fcntl.flock(lock, fcntl.LOCK_EX)
         current = load_settings(path)
         updated = replace(current, **changes)
-        text = _updated_text(path.read_text(encoding='utf-8'), updated, changes)
+        text = _updated_text(path.read_text(encoding='utf-8'), updated, changes, json_format=path.suffix.lower() == '.json')
         if text != path.read_text(encoding='utf-8'):
             _atomic_write(path, text)
     return updated

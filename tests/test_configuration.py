@@ -2,6 +2,34 @@ import pytest
 from configuration import Settings, load_settings
 
 
+@pytest.mark.parametrize('section', ['observatory', 'chart', 'targets', 'preview', 'equipment'])
+@pytest.mark.parametrize('value', [None, [], 'invalid', 1])
+def test_json_config_rejects_non_object_settings_sections(tmp_path, section, value):
+    import json
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps({section: value}))
+    with pytest.raises(ValueError, match=f'Configuration section {section} must be an object'):
+        load_settings(path)
+
+
+def test_json_updates_preserve_other_sections_and_clear_location(tmp_path):
+    import json
+    from configuration import save_settings_changes
+    path = tmp_path / 'config.json'
+    extra = {'parameters': {'moon': {'mode': 'relative', 'weight': 10}}, '_description': 'Retain this'}
+    path.write_text(json.dumps({'observatory': {'latitude_deg': 52.0}, 'session_selection': extra,
+                                'rig': {'camera': 'Test camera'}, '_notes': ['Retain notes']}))
+    save_settings_changes(path, exposure_seconds=240, latitude_deg=None)
+    save_settings_changes(path, minimum_altitude_deg=50)
+    saved = load_settings(path)
+    assert saved.latitude_deg is None
+    assert saved.exposure_seconds == 240 and saved.minimum_altitude_deg == 50
+    data = json.loads(path.read_text())
+    assert data['session_selection'] == extra
+    assert data['rig'] == {'camera': 'Test camera'}
+    assert data['_notes'] == ['Retain notes']
+
+
 def test_empty_config_leaves_location_unset(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text("")

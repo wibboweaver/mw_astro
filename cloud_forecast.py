@@ -3,7 +3,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import json
 import math
-import tomllib
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -12,7 +11,8 @@ ENDPOINT='https://api.open-meteo.com/v1/forecast'
 
 
 def load_cloud_settings(path):
-    with Path(path).open('rb') as handle:values=tomllib.load(handle).get('cloud_forecast',{})
+    from configuration import read_config
+    values=read_config(path).get('cloud_forecast',{})
     if values.keys()-DEFAULTS.keys():raise ValueError('Unknown cloud_forecast setting.')
     result=DEFAULTS|values
     if type(result['enabled']) is not bool:raise ValueError('cloud_forecast.enabled must be true or false.')

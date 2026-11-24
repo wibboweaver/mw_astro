@@ -1,8 +1,14 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.DS_Store
+.*-backups/
+config.json.lock
 config.toml.lock
 .settings-update-backups/
 
 # Accepted observing plans
 plans/
+
+# Per-sequence analyser disable choices
+.sequence-analysis/

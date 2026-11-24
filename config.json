@@ -1,0 +1,157 @@
+{
+  "observatory": {
+    "latitude_deg": 52.293232,
+    "longitude_deg": -3.036226,
+    "height_m": 40.0,
+    "timezone": "Europe/London",
+    "horizon_file": "Decking.txt"
+  },
+  "chart": {
+    "start_hour": 17,
+    "start_minute": 0,
+    "duration_hours": 16.0,
+    "step_minutes": 10,
+    "minimum_altitude_deg": 50,
+    "evening_date": "2026-11-22",
+    "visibility_mode": "During window",
+    "exposure_seconds": 300.0
+  },
+  "targets": {
+    "min_frame_coverage_percent": 10.0,
+    "max_objects": 200,
+    "target_source": "Automatic catalogue",
+    "catalogue_scope": "Named and Messier objects",
+    "catalogue_file": "targets.csv"
+  },
+  "preview": {
+    "show_preview": true,
+    "image_field": "Fit target"
+  },
+  "equipment": {
+    "focal_length_mm": 550.0,
+    "sensor_width_mm": 23.5,
+    "sensor_height_mm": 15.7,
+    "frame_rotation_deg": 29.0,
+    "camera_width_px": 6248,
+    "camera_height_px": 4176
+  },
+  "planning_rules": {
+    "enabled": true,
+    "allow_warning_override": true,
+    "darkness": {
+      "preferred_sun_altitude": -18.0
+    },
+    "visibility": {
+      "sample_interval_minutes": 2
+    },
+    "moon": {
+      "enabled": true,
+      "minimum_moon_altitude_deg": 0.0,
+      "low_illumination_percent": 30.0,
+      "broadband_min_separation": 60.0,
+      "high_illumination_percent": 70.0,
+      "bright_moon_any_separation": true,
+      "broadband_critical_separation": 30.0
+    },
+    "integration": {
+      "preferred_minutes": 90.0,
+      "preferred_exposures": 30
+    },
+    "timing": {
+      "late_start_hour": 23,
+      "early_hours_end": 6
+    }
+  },
+  "cloud_forecast": {
+    "enabled": true,
+    "clear_max_percent": 20,
+    "light_max_percent": 50,
+    "medium_max_percent": 80
+  },
+  "night_rating": {
+    "visibility_weight": 30,
+    "moon_weight": 15,
+    "frame_weight": 25,
+    "preferred_window_minutes": 120,
+    "preferred_frame_coverage_percent": 50.0,
+    "frame_curve_exponent": 1.0,
+    "undersized_score_cap": 60.0
+  },
+  "rig": {
+    "mount": "ZWO AM5N Harmonic Mount",
+    "tripod": "TC40 Carbon Tripod",
+    "telescope": "Sharpstar Z4 100mm f/5.5 Astrograph",
+    "camera": "ZWO ASI2600MC-P25 Camera Kit",
+    "guide_camera": "25ASI220MM Mini",
+    "filter": "Altair Ha OIII dualband 4nm filter",
+    "guide_scope": "Astroessentials 50mm 200mm focal length guide scope",
+    "computer": "BOSGAME E7 Business Mini PC Windows 11 Pro",
+    "focuser": "ZWO EAF N Electronic Focuser",
+    "power_supply": "ZWO 12V 10A AC/DC Power Supply",
+    "telescope_dew_heater": "Lynx Astro 40cm Dew Heater Strap for Z4",
+    "guide_scope_dew_heater": "Lynx Astro 15cm Dew Heater Strap for the Guide Scope",
+    "dew_heater_adapters": "Lynx Astro 2.1mm DC-to-RCA Dew Heater Adapters",
+    "pier_extension": "ZWO PE200 pier extension"
+  },
+  "session_selection": {
+    "_description": "Mandatory parameters have no weight or rating: every condition must pass, including data availability. Relative parameters contribute normalised weights; 0 disables a preference. Missing relative data uses unknown_condition_score. All-mandatory selection has no numeric rating.",
+    "session_type": "non_automated",
+    "parameters": {
+      "astronomical_night": {
+        "mode": "mandatory",
+        "_description": "Sun at/below -18 degrees when mandatory. Relative mode rates night above astronomical twilight, down to planning_rules.darkness.maximum_sun_altitude."
+      },
+      "altitude": {
+        "mode": "mandatory",
+        "_description": "Mandatory: at/above chart.minimum_altitude_deg and the absolute planning minimum. Relative: higher average altitude earns preference."
+      },
+      "horizon": {
+        "mode": "mandatory",
+        "_description": "Actual horizon obstruction always excludes capture. Mandatory: also require planning_rules.visibility.horizon_clearance_margin. Relative: score that clearance margin."
+      },
+      "integration": {
+        "mode": "relative",
+        "weight": 35,
+        "_description": "Mandatory: meet planning_rules.integration.minimum_minutes and minimum_exposures. Relative: compare complete exposure counts after overheads."
+      },
+      "transit": {
+        "mode": "relative",
+        "weight": 15,
+        "_description": "Mandatory: include the target transit. Relative: favour windows containing or close to transit."
+      },
+      "moon": {
+        "mode": "relative",
+        "weight": 10,
+        "maximum_interference": 0.0,
+        "_description": "Mandatory: complete Moon data and effective interference no greater than maximum_interference (0 means none). Relative: average Moon penalty, adjusted for dual-band sensitivity."
+      },
+      "cloud": {
+        "mode": "relative",
+        "weight": 10,
+        "maximum_percent": 50,
+        "_description": "Mandatory: complete cloud data and no point above maximum_percent. Relative: decreasing preference above cloud_forecast.clear_max_percent; missing data remains unknown."
+      },
+      "precipitation": {
+        "mode": "relative",
+        "weight": 5,
+        "maximum_percent": 0.0,
+        "_description": "Mandatory: complete forecast and no probability above maximum_percent. Relative: prefer lower precipitation probability."
+      },
+      "start_time": {
+        "mode": "relative",
+        "weight": 5,
+        "_description": "Non-automated relative mode progressively favours earlier eligible dark time, with additional late/early-hours penalties. Automated sessions ignore this relative preference. Mandatory: start within the normal hours in planning_rules.timing."
+      }
+    },
+    "unknown_condition_score": 0.5,
+    "candidate_step_minutes": 10,
+    "transit_proximity_hours": 2,
+    "late_start_score": 0.5
+  },
+  "_notes": [
+    "Active application configuration. Sidebar changes update their own scalar fields while preserving all other sections.",
+    "session_selection.parameters: mandatory rules have no weight or rating and must pass. Relative rules have normalised weights; zero disables their preference.",
+    "session_selection.session_type: non_automated favours earlier usable dark time. automated ignores the relative start-time preference.",
+    "Rig inventory is stored for future use and is not displayed."
+  ]
+}

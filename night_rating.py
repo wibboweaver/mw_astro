@@ -3,7 +3,6 @@ from earth_rotation import planning_earth_rotation
 from datetime import datetime,timezone
 import math
 from pathlib import Path
-import tomllib
 import numpy as np
 from cloud_forecast import summarise_cloud_window
 from object_sizes import catalogue_sizes,normalise_id
@@ -12,7 +11,8 @@ from horizon import horizon_altitudes
 DEFAULTS={'visibility_weight':30.,'moon_weight':15.,'frame_weight':25.,'preferred_window_minutes':120.,'preferred_frame_coverage_percent':50.,'frame_curve_exponent':1.,'undersized_score_cap':60.}
 
 def load_rating_settings(path):
-    with Path(path).open('rb') as f:values=tomllib.load(f).get('night_rating',{})
+    from configuration import read_config
+    values=read_config(path).get('night_rating',{})
     if values.keys()-DEFAULTS.keys():raise ValueError('Unknown night_rating setting.')
     result=DEFAULTS|values
     if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) or v<0 for v in result.values()):raise ValueError('Night rating values must be finite and nonnegative.')

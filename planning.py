@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import math
-import tomllib
 import numpy as np
 
 DEFAULTS = {
@@ -22,9 +21,8 @@ DEFAULTS = {
 
 
 def load_rules(path=None):
-    from configuration import CONFIG_PATH
-    with Path(path or CONFIG_PATH).open('rb') as handle:
-        supplied = tomllib.load(handle).get('planning_rules', {})
+    from configuration import read_config
+    supplied = read_config(path).get('planning_rules', {})
     def merge(default, values, prefix='planning_rules'):
         if not isinstance(values, dict) or values.keys() - default.keys():
             raise ValueError(f'Unknown or malformed {prefix} settings.')
