@@ -2,6 +2,9 @@
 
 ## 2026-11-24
 
+- Rename the planner's Clear objects button to Clear object. Add integrated
+  reference-image search and an optional camera-frame overlay to the local
+  sibling Image annotator, preserving uploaded-image annotations when switching.
 - Base the chart's Moon rating on the selected start–end interval, with the
   strongest overlapping interference level and affected-time percentages.
 - Return the planner to one selected object, one trajectory, two timeline

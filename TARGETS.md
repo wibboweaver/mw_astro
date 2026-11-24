@@ -357,7 +357,7 @@ chosen, or Unknown if Moon assessment is disabled or data are unavailable.
 Cursor movement still controls the angle, illumination and phase readouts;
 it does not change the selected-interval rating.
 
-Clear objects, to the right of the chart's layer checkboxes, unchecks the selected
+Clear object, to the right of the chart's layer checkboxes, unchecks the selected
 object and clears its timelines and report. Clear timelines beside it removes
 the markers while keeping the object selected. Changing or filtering out the
 selected object clears its previous timelines and report. Trajectories, cloud
@@ -368,6 +368,16 @@ directory named astro-annotate. Its app.py, image_canvas component and own
 configuration must be present alongside the mw_astro directory. That project's
 source and saved configuration are not bundled in this repository. If the sibling
 project is absent, the page displays its expected location; other pages remain usable.
+
+The local Image annotator's search accepts recognised common names or catalogue
+IDs and projects the same ESA DSS2 colour survey used by the planner into its
+existing annotation canvas. Reference images have known sky coordinates and do
+not need plate solving. The search field controls the field of view (0.1–10°).
+Show uploaded image / Show reference image switches the existing canvas between
+sources, retaining annotations and viewing state. Show camera frame toggles a
+view-only overlay using the saved rig geometry; it is excluded from downloads.
+Direct HiPS tile projection uses the astropy-healpix dependency. The local sibling
+annotator source remains separate from this repository.
 
 In the FITS browser, Browse file shows only the selected file's categorised
 metadata. Browse folder shows a sortable table with one row per FITS file in that

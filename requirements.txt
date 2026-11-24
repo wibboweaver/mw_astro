@@ -1,5 +1,6 @@
 astroquery>=0.4.11
 astropy>=7
+astropy-healpix>=1.1,<2
 streamlit>=1.66
 pytest>=8
 numpy>=1.25

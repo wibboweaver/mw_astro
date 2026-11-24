@@ -18,6 +18,8 @@ def test_click_markers_exist_before_resize_and_survive_redraw(tmp_path):
                     dict(start=first+5400000, end=first+7200000, level='strong')]
     content=chart_html(frame,40,'Europe/London',target_name='Single target',moon_distance=moon,moon_intervals=interference,cloud_forecast=dict(segments=segments,precipitation_segments=segments), suggested_interval=dict(points=[first+3600000,first+7200000],message='Suggested interval selected.'))
     script=content.split('<script>')[1].split('</script>')[0]
+    assert '>Clear object</button>' in content
+    assert '>Clear objects</button>' not in content
     source=tmp_path/'chart.js';source.write_text(script)
     harness=r'''
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
