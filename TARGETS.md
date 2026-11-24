@@ -343,6 +343,14 @@ equipment, forecasting and rig values; JSON _description and _notes fields expla
 the selection rules. Legacy TOML import remains supported when an explicit .toml
 file is supplied to a loader. The application reads and writes config.json.
 
+Clear objects, beside the chart's Precipitation checkbox, unchecks the selected
+visible targets and clears all timelines. With two selected targets, three clicks
+can place three timeline markers; the third is a visual reference only. Duration,
+image counts and imaging reports always use the first two markers. A further
+click starts a new interval. Deselecting either target, including removal by a
+visibility filter, clears all timeline markers and the previous report. Adding
+a comparison target preserves the existing interval.
+
 The Image annotator page runs the separate Astro Annotate project from a sibling
 directory named astro-annotate. Its app.py, image_canvas component and own
 configuration must be present alongside the mw_astro directory. That project's

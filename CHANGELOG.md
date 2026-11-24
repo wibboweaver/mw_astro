@@ -2,6 +2,9 @@
 
 ## 2026-11-24
 
+- Add Clear objects beside the chart's precipitation checkbox. Allow a third
+  timeline with two selected targets, keeping calculations on the first two;
+  deselecting any target clears all timelines and the previous report.
 - Browse FITS folders recursively, with a configurable child-folder depth guard
   (fits_browser.max_folder_depth, default 3) and relative paths for duplicate names.
 - Add a sortable FITS folder metadata table while preserving the separate

@@ -63,6 +63,9 @@ def test_selected_interval_missing_invalid_reversed_and_dst():
         with pytest.raises(ValueError,match=message):selected_interval(value,first,last)
     assert selected_interval({'interval':[b,a]},first,last)==(first,last)
     assert (last-first).total_seconds()==6*3600
+    assert selected_interval({'interval':[b,a,a+1000]},first,last)==(first,last)
+    with pytest.raises(ValueError,match='Invalid chart interval'):
+        selected_interval({'interval':[a,b,a,b]},first,last)
 
 
 def test_moon_band_payload_and_layer_controls():
@@ -135,3 +138,4 @@ def test_choose_intervals_button_precedes_clear_and_carries_suggestion():
     assert payload['suggested_interval'] == suggestion
     assert html.index('id="choose-intervals"') < html.index('id="clear-interval"')
     assert 'chooseButton.disabled=!validSuggestion' in html
+    assert html.index('id="show-precip"') < html.index('id="clear-objects"') < html.index('<div class="cards">')

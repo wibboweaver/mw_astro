@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=(), suggested_interval=None, primary_name="", comparison_frame=None, comparison_name=None):
+def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable", exposure_seconds=180.0, target_key="", night_periods=(), moon_intervals=(), cloud_forecast=None, moon_distance=None, twilight_periods=(), suggested_interval=None, primary_name="", comparison_frame=None, comparison_name=None, interval_revision=0):
     import math
     if not math.isfinite(exposure_seconds) or exposure_seconds <= 0:
         raise ValueError("Exposure must be positive and finite.")
@@ -28,6 +28,7 @@ def chart_html(frame, minimum_altitude_deg, timezone, object_size="Unavailable",
         "minimum": float(minimum_altitude_deg), "timezone": timezone,
         "object_size": object_size, "exposure_seconds": float(exposure_seconds),
         "target_key": target_key,
+        "interval_revision": interval_revision,
         "astronomical_twilight": [[int(i.start.timestamp()*1000),int(i.end.timestamp()*1000)] for i in twilight_periods],
         "astronomical_night": [[int(interval.start.timestamp()*1000), int(interval.end.timestamp()*1000)] for interval in night_periods],
     }
@@ -50,7 +51,9 @@ def chart_component():
 
 
 def render_chart(content, key):
-    return chart_component()(data={'html':content}, key=key, default={'interval': []}, on_interval_change=lambda: None)
+    from target_selection import clear_target_selection
+    return chart_component()(data={'html':content}, key=key, default={'interval': []},
+                             on_interval_change=lambda: None, on_clear_objects_change=clear_target_selection)
 
 
 def selected_interval(value, first, last):
@@ -58,7 +61,7 @@ def selected_interval(value, first, last):
     import math
     from datetime import datetime, timezone
     points = value.get('interval', []) if isinstance(value, dict) else []
-    if not isinstance(points, list) or len(points) > 2:
+    if not isinstance(points, list) or len(points) > 3:
         raise ValueError('Invalid chart interval. Clear the interval and click again.')
     for point in points:
         if isinstance(point, bool) or not isinstance(point, (float, int)) or not math.isfinite(point) or not first.timestamp()*1000 <= point <= last.timestamp()*1000:
@@ -67,7 +70,7 @@ def selected_interval(value, first, last):
         raise ValueError('Missing start and stop times. Click twice on the chart to select an interval.')
     if len(points) == 1:
         raise ValueError('Missing stop time. Click a second point on the chart.')
-    begin, end = sorted(points)
+    begin, end = sorted(points[:2])
     if begin == end:
         raise ValueError('Start and stop times must be different. Select a nonzero interval on the chart.')
     return tuple(datetime.fromtimestamp(point/1000, timezone.utc) for point in (begin,end))

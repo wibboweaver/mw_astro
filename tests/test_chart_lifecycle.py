@@ -84,11 +84,15 @@ const frame={contentWindow:child,set srcdoc(value){reloads++;}};
 const root={querySelector:()=>frame};
 const ctx={window:{addEventListener:(_,fn)=>listeners.add(fn),removeEventListener:(_,fn)=>listeners.delete(fn)}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[1],'utf8').replace('export default function','function render'),ctx);
-const component={parentElement:root,data:{html:'same chart'},setStateValue:(key,value)=>updates.push(value)};
+const triggers=[];
+const component={parentElement:root,data:{html:'same chart'},setStateValue:(key,value)=>updates.push(value),setTriggerValue:(key,value)=>triggers.push({key,value})};
 ctx.render(component);ctx.render(component);
 assert.equal(reloads,1);assert.equal(listeners.size,1);
 const receive=[...listeners][0];const event={source:child,data:{type:'mw-astro-interval',points:[1,2]}};
 receive(event);receive(event);assert.equal(updates.length,1);
+receive({source:{},data:{type:'mw-astro-clear-objects'}});assert.equal(triggers.length,0);
+receive({source:child,data:{type:'mw-astro-clear-objects'}});
+assert.deepEqual(triggers,[{key:'clear_objects',value:true}]);
 component.data.html='changed chart';const cleanup=ctx.render(component);
 assert.equal(reloads,2);cleanup();assert.equal(listeners.size,0);
 '''
@@ -113,7 +117,9 @@ class Element {
  addEventListener(k,fn){this.handlers[k]=fn;}
 }
 const elements={};const get=id=>elements[id]??(elements[id]=new Element());let resize;const events=[];
-const ctx={Intl,console,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},sessionStorage:{getItem:()=>null,setItem:()=>{}},window:{parent:{postMessage:e=>events.push(e)}},ResizeObserver:class{constructor(cb){resize=cb;}observe(){}}};
+const saved=new Map();
+const storage={get length(){return saved.size;},key:i=>Array.from(saved.keys())[i],getItem:key=>saved.get(key)??null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
+const ctx={Intl,console,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},sessionStorage:storage,window:{parent:{postMessage:e=>events.push(e)}},ResizeObserver:class{constructor(cb){resize=cb;}observe(){}}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),ctx);
 const plot=get('plot');
 const secondary=()=>plot.children.filter(e=>e.attrs['data-secondary-target']==='B');
@@ -126,8 +132,28 @@ assert.match(get('alt').textContent,/50/);
 plot.handlers.click({clientX:200,clientY:100});plot.handlers.click({clientX:400,clientY:100});
 const interval=JSON.stringify(events.at(-1).points);resize();assert.equal(secondary().length,1);
 assert.equal(JSON.stringify(events.at(-1).points),interval);
+const duration=get('duration').textContent,images=get('images').textContent;
+plot.handlers.click({clientX:600,clientY:100});
+assert.equal(events.at(-1).points.length,3);
+assert.equal(JSON.stringify(events.at(-1).points.slice(0,2)),interval);
+assert.equal(get('duration').textContent,duration);assert.equal(get('images').textContent,images);
+const markers=()=>plot.children.find(e=>e.attrs.id==='interval-lines').children.filter(e=>'data-boundary' in e.attrs);
+assert.equal(markers().length,3);resize();assert.equal(markers().length,3);
 get('show-object').checked=false;get('show-object').onchange();assert.equal(secondary().length,0);
 get('show-object').checked=true;get('show-object').onchange();assert.equal(secondary().length,1);
+// A rerun preserves all three markers, including the extra visual reference.
+const script=fs.readFileSync(process.argv[1],'utf8');
+vm.runInContext(script,vm.createContext({...ctx}));assert.equal(markers().length,3);
+// Deselecting a target changes the revision and removes every saved interval.
+saved.set('mw-astro-interval:0:another-target:1:2','[1,2]');
+vm.runInContext(script.replace('"interval_revision": 0','"interval_revision": 1'),vm.createContext({...ctx}));
+assert.equal(markers().length,0);
+assert.ok(!Array.from(saved.keys()).some(key=>key.startsWith('mw-astro-interval:0:')));
+plot.handlers.click({clientX:200,clientY:100});assert.equal(markers().length,1);
+get('clear-objects').handlers.click();
+assert.equal(markers().length,0);
+assert.equal(events.at(-1).type,'mw-astro-clear-objects');
+assert.ok(!Array.from(saved.keys()).some(key=>key.startsWith('mw-astro-interval:')));
 '''
     result = subprocess.run([node,'-e',harness,str(source)],capture_output=True,text=True)
     assert result.returncode == 0, result.stderr

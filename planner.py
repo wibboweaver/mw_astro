@@ -287,6 +287,8 @@ with st.spinner("Checking target visibility…"):
         tracks = cached_tracks(targets, latitude, longitude, height, start, duration_hours, settings.step_minutes)
         eligible = sorted(filter_tracks(tracks, minimum_altitude, horizon_profile, visibility_mode), key=str.casefold)
 if not eligible:
+    from target_selection import set_target_selection
+    set_target_selection([])
     st.warning("No targets meet the visibility limits.")
     st.stop()
 
@@ -329,11 +331,13 @@ if previous is None:
 default_names = [name for name in previous if name in names]
 if previous and not default_names:
     default_names = [names[0]]
-st.session_state["selected_targets"] = default_names
+from target_selection import set_target_selection
+set_target_selection(default_names)
 default_rows = [names.index(name) for name in default_names]
 # Reset row indices whenever identities/order change, retaining the target by name.
 identities = [(item.common_name, item.object_id, item.ra_deg, item.dec_deg) for item in visible_targets]
 table_key = "target_table:" + hashlib.sha256(json.dumps(identities).encode()).hexdigest()[:16]
+st.session_state['active_target_table_key'] = table_key
 usable_count=sum(value['start'] is not None for value in ratings.values())
 st.caption(f'{usable_count} listed targets have an observable astronomical-night window above the minimum altitude and local horizon. '
     'Target visibility filters the full chart period, which can also include daylight and twilight. '
@@ -355,7 +359,7 @@ selection = st.dataframe(display_table,
 rows = selection.selection.rows
 requested_names = [names[row] for row in rows if 0 <= row < len(visible_targets)]
 selected_names = ordered_selection(st.session_state["selected_targets"], requested_names)
-st.session_state["selected_targets"] = selected_names
+set_target_selection(selected_names)
 if not selected_names:
     st.session_state.pop("selected_target", None)
     st.stop()
@@ -418,9 +422,11 @@ with chart_column:
     except (ValueError, TypeError, OSError) as exc:
         session_suggestion = dict(points=[], message=f'A session interval could not be suggested: {exc}')
     chart_content = renderer(frame, minimum_altitude, settings.timezone, object_size_label(target.object_id),
+                  interval_revision=st.session_state.get('chart_interval_revision', 0),
                   primary_name=selected, comparison_frame=comparison_frame, comparison_name=comparison_name,
                   exposure_seconds=exposure, target_key=f"{target.ra_deg}:{target.dec_deg}", suggested_interval=session_suggestion, night_periods=night_periods, twilight_periods=twilight_periods, moon_intervals=moon_data["intervals"], cloud_forecast=cloud_data, moon_distance={"times":moon_data["times"],"separation":moon_data["separation"],"altitudes":moon_data["altitudes"],"illumination":moon_data["illumination"],"phase_angles":moon_data["phase_angles"],"enabled":moon_data["enabled"]})
-    interval_key = "observation:" + hashlib.sha256(f"{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]
+    interval_revision = st.session_state.get('chart_interval_revision', 0)
+    interval_key = "observation:" + hashlib.sha256(f"{interval_revision}:{target.ra_deg}:{target.dec_deg}:{frame['Time'].iloc[0]}:{frame['Time'].iloc[-1]}".encode()).hexdigest()[:16]
     chart_selection = interactive_chart.render_chart(chart_content, interval_key)
     render_planner(target, settings, start, exposure, horizon_profile, chart_selection, frame["Time"].iloc[0], frame["Time"].iloc[-1], moon_data=moon_data, cloud_data=cloud_data,night_rating=rating,session_suggestion=session_suggestion)
 

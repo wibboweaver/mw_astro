@@ -599,3 +599,70 @@ def test_filter_promotes_remaining_comparison_target():
         assert app.session_state['selected_targets'] == ['Fixture high']
         assert app.session_state['selected_target'] == 'Fixture high'
         assert chart_payload(app)['comparison'] is None
+        assert chart_payload(app)['interval_revision'] > 0
+
+
+def send_chart_event(app, points=None, clear_objects=False):
+    import json
+    from streamlit.components.v2.bidi_component.main import _make_trigger_id
+    chart = next(item for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name)
+    widget_id = _make_trigger_id(chart.proto.id, 'events') if clear_objects else chart.proto.id
+    states = app._tree.get_widget_states()
+    retained = [state for state in states.widgets if state.id != widget_id]
+    del states.widgets[:]
+    states.widgets.extend(retained)
+    state = states.widgets.add(id=widget_id)
+    if clear_objects:
+        state.json_trigger_value = json.dumps([{'event': 'clear_objects', 'value': True}])
+    else:
+        state.json_value = json.dumps({'interval': points})
+    return app._run(states)
+
+
+def test_clear_objects_chart_action_unchecks_visible_targets_and_stays_cleared():
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks):
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        select_targets(app, ['Fixture high', 'Fixture low'])
+        revision = chart_payload(app)['interval_revision']
+        send_chart_event(app, clear_objects=True)
+        assert not app.exception
+        assert app.session_state['selected_targets'] == []
+        table_key = app.session_state['active_target_table_key']
+        assert app.session_state[table_key]['selection']['rows'] == []
+        assert not chart_frames(app)
+        assert app.session_state['chart_interval_revision'] == revision + 1
+        app.run()
+        assert not app.exception and not chart_frames(app)
+        assert app.session_state['selected_targets'] == []
+        select_targets(app, ['Fixture high'])
+        assert not app.exception
+        assert chart_payload(app)['interval_revision'] == revision + 1
+
+
+@pytest.mark.parametrize('remaining', ['Fixture high', 'Fixture low'])
+def test_deselecting_either_target_discards_all_timelines_and_old_report(remaining):
+    from planning import Report, Check
+    with patch('catalogue.load_catalogue', return_value=FIXTURES), patch('configuration.load_settings', return_value=Settings(latitude_deg=52, longitude_deg=-3)), patch('visibility.calculate_tracks', side_effect=fake_tracks), patch('planning_ui.evaluate_checklist', return_value=Report([Check('Test', 'Pass', 'Fixture')], 20, 60)) as evaluate:
+        app = AppTest.from_file(APP, default_timeout=20).run()
+        select_targets(app, ['Fixture high', 'Fixture low'])
+        payload = chart_payload(app)
+        first = payload['times'][0]
+        send_chart_event(app, [first + 3600000, first + 7200000])
+        assert not app.exception
+        next(button for button in app.button if button.label == 'Generate report').click().run()
+        assert not app.exception
+        report = app.session_state['imaging_report_markdown']
+        plan = evaluate.call_args.args[0]
+        old_chart_id = next(item.proto.id for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name)
+        send_chart_event(app, [first + 3600000, first + 7200000, first + 1800000])
+        assert not app.exception
+        assert app.session_state['imaging_report_markdown'] == report
+        next(button for button in app.button if button.label == 'Generate report').click().run()
+        assert evaluate.call_args.args[0] == plan
+        select_targets(app, [remaining])
+        assert not app.exception
+        assert chart_payload(app)['interval_revision'] == payload['interval_revision'] + 1
+        new_chart_id = next(item.proto.id for item in app.get('bidi_component') if 'observation_chart' in item.proto.component_name)
+        assert new_chart_id != old_chart_id
+        assert 'imaging_report_markdown' not in app.session_state
+        assert any('Missing start and stop times' in item.value for item in app.info)
